@@ -55,6 +55,9 @@ public interface TypeWidget {
 
     IterateAdapter getIterableAdapter();
 
+    boolean isStream();
+    StreamAdapter getStreamAdapter();
+
     boolean isPromise();
 
     PromiseAdapter getPromiseAdapter();

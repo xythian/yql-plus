@@ -19,6 +19,7 @@ import org.dynalang.dynalink.support.TypeUtilities;
 import org.objectweb.asm.Type;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 public class ReflectiveJavaTypeWidget extends BaseTypeWidget {
     private final ProgramValueTypeAdapter adapter;
@@ -46,7 +47,7 @@ public class ReflectiveJavaTypeWidget extends BaseTypeWidget {
 
     @Override
     public YQLCoreType getValueCoreType() {
-        if (isIterable()) {
+        if (isIterable() || isStream()) {
             return YQLCoreType.ARRAY;
         } else if (hasProperties()) {
             return YQLCoreType.STRUCT;
@@ -87,6 +88,16 @@ public class ReflectiveJavaTypeWidget extends BaseTypeWidget {
         } else {
             throw new UnsupportedOperationException();
         }
+    }
+
+    @Override
+    public boolean isStream() {
+        return Stream.class.isAssignableFrom(clazz);
+    }
+
+    @Override
+    public StreamAdapter getStreamAdapter() {
+        return new JavaStreamAdapter(adapter.adaptInternal(JVMTypes.getTypeArgument(typeLiteral.getType(), 0)));
     }
 
     @Override

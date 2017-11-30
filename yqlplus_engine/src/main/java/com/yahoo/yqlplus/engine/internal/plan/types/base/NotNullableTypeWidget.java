@@ -19,6 +19,7 @@ import com.yahoo.yqlplus.engine.internal.plan.types.OptionalAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.PromiseAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.ValueSequence;
 import org.objectweb.asm.Type;
@@ -175,6 +176,16 @@ public final class NotNullableTypeWidget implements TypeWidget {
     @Override
     public UnificationAdapter getUnificationAdapter(ProgramValueTypeAdapter typeAdapter) {
         return target.getUnificationAdapter(typeAdapter);
+    }
+
+    @Override
+    public boolean isStream() {
+        return target.isStream();
+    }
+
+    @Override
+    public StreamAdapter getStreamAdapter() {
+        return target.getStreamAdapter();
     }
 
     @Override

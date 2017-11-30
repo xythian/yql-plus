@@ -33,11 +33,13 @@ import com.yahoo.yqlplus.engine.internal.plan.streams.StreamOperator;
 import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.AnyTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BytecodeCastExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.InvokeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.NotNullableTypeWidget;
@@ -57,6 +59,8 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class PhysicalExprOperatorCompiler {
     public static final MetricDimension EMPTY_DIMENSION = new MetricDimension();
@@ -569,15 +573,101 @@ public class PhysicalExprOperatorCompiler {
 
     private BytecodeExpression streamExecute(final BytecodeExpression program, final BytecodeExpression ctxExpr, OperatorNode<PhysicalExprOperator> input, OperatorNode<StreamOperator> stream) {
         BytecodeExpression streamInput = evaluateExpression(program, ctxExpr, input);
-        StreamSink streamPipeline = new SkipNullsSink(compileStream(program, ctxExpr, stream));
         GambitCreator.ScopeBuilder scope = this.scope.scope();
         final BytecodeExpression timeout = getTimeout(ctxExpr, input.getLocation());
         streamInput = scope.resolve(input.getLocation(), timeout, streamInput);
-        Preconditions.checkArgument(streamInput.getType().isIterable(), "streamExecute argument must be iterable");
-        GambitCreator.IterateBuilder iterateBuilder = scope.iterate(streamInput);
-        streamPipeline.prepare(scope, program, ctxExpr, iterateBuilder.getItem().getType());
-        streamPipeline.item(iterateBuilder, iterateBuilder.getItem());
-        return streamPipeline.end(scope, iterateBuilder);
+        if(streamInput.getType().isIterable()) {
+            GambitCreator.IterateBuilder iterateBuilder = scope.iterate(streamInput);
+            StreamSink streamPipeline = new SkipNullsSink(compileStream(program, ctxExpr, stream));
+            streamPipeline.prepare(scope, program, ctxExpr, iterateBuilder.getItem().getType());
+            streamPipeline.item(iterateBuilder, iterateBuilder.getItem());
+            return streamPipeline.end(scope, iterateBuilder);
+        } else if (streamInput.getType().isStream()) {
+            return compileStreamExpression(program, ctxExpr, stream, streamInput);
+         } else {
+            throw new UnsupportedOperationException("streamExecute argument must be iterable; type is " + streamInput.getType());
+
+        }
+    }
+
+    private BytecodeExpression compileStreamExpression(BytecodeExpression program, BytecodeExpression ctxExpr, OperatorNode<StreamOperator> streamOperator, BytecodeExpression streamInput) {
+        StreamAdapter adapter = streamInput.getType().getStreamAdapter();
+        return compileStreamExpression(adapter, program,  ctxExpr, streamOperator, streamInput);
+    }
+
+    private BytecodeExpression compileStreamExpression(StreamAdapter adapter, BytecodeExpression program, BytecodeExpression ctxExpr, OperatorNode<StreamOperator> streamOperator, BytecodeExpression streamInput) {
+        if (streamOperator.getOperator() == StreamOperator.SINK) {
+            OperatorNode<SinkOperator> sink = streamOperator.getArgument(0);
+            switch (sink.getOperator()) {
+                case ACCUMULATE:
+                    return adapter.collectList(streamInput);
+                case STREAM: {
+                    OperatorNode<PhysicalExprOperator> target = sink.getArgument(0);
+                    BytecodeExpression targetExpression = evaluateExpression(program, ctxExpr, target);
+                    return adapter.streamInto(streamInput, targetExpression);
+                }
+                default:
+                    throw new UnsupportedOperationException("Unknown SINK operator: " + sink);
+            }
+        }
+        StreamSink next = compileStream(program, ctxExpr, streamOperator.<OperatorNode<StreamOperator>>getArgument(0));
+        switch (streamOperator.getOperator()) {
+            case TRANSFORM: {
+                OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
+                return new TransformSink(next, function);
+            }
+            case SCATTER: {
+                OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
+                return new ScatterSink(next, function);
+            }
+            case DISTINCT: {
+                return new DistinctSink(next, streamOperator.getLocation());
+            }
+            case FLATTEN: {
+                return new FlattenSink(next);
+            }
+            case FILTER: {
+                OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
+                return new FilterSink(next, function);
+            }
+            case OFFSET: {
+                OperatorNode<PhysicalExprOperator> offset = streamOperator.getArgument(1);
+                return new SliceSink(next, null, offset);
+            }
+            case LIMIT: {
+                OperatorNode<PhysicalExprOperator> limit = streamOperator.getArgument(1);
+                return new SliceSink(next, limit, null);
+            }
+            case SLICE: {
+                OperatorNode<PhysicalExprOperator> offset = streamOperator.getArgument(1);
+                OperatorNode<PhysicalExprOperator> limit = streamOperator.getArgument(2);
+                return new SliceSink(next, limit, offset);
+            }
+            case ORDERBY: {
+                OperatorNode<FunctionOperator> comparator = streamOperator.getArgument(1);
+                return new SortSink(next, comparator);
+            }
+            case GROUPBY: {
+                OperatorNode<FunctionOperator> key = streamOperator.getArgument(1);
+                OperatorNode<FunctionOperator> output = streamOperator.getArgument(2);
+                return new GroupbySink(next, key, output);
+            }
+            case CROSS: {
+                OperatorNode<PhysicalExprOperator> right = streamOperator.getArgument(1);
+                OperatorNode<FunctionOperator> output = streamOperator.getArgument(2);
+                return new CrossSink(next, right, output);
+            }
+            case OUTER_HASH_JOIN:
+            case HASH_JOIN: {
+                OperatorNode<PhysicalExprOperator> right = streamOperator.getArgument(1);
+                OperatorNode<FunctionOperator> leftKey = streamOperator.getArgument(2);
+                OperatorNode<FunctionOperator> rightKey = streamOperator.getArgument(3);
+                OperatorNode<FunctionOperator> join = streamOperator.getArgument(4);
+                return new HashJoinSink(next, streamOperator.getOperator() == StreamOperator.OUTER_HASH_JOIN, right, leftKey, rightKey, join);
+            }
+            default:
+                throw new UnsupportedOperationException("Unexpected transform StreamOperator: " + streamOperator.toString());
+        }
     }
 
     public TypeWidget keyCursorFor(GambitTypes types, List<String> names) {

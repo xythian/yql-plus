@@ -31,6 +31,7 @@ import com.yahoo.yqlplus.engine.internal.plan.types.IndexAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.AnyTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
@@ -150,6 +151,11 @@ public class ASMProgramTypeAdapter implements ProgramValueTypeAdapter {
                     IterateAdapter iterableAdapter = value.getIterableAdapter();
                     YQLType valueType = adaptTypeWidgetValue(iterableAdapter.getValue());
                     return YQLArrayType.create(valueType);
+                } else if (value.isStream()) {
+                    StreamAdapter streamAdapter = value.getStreamAdapter();
+                    YQLType valueType = adaptTypeWidgetValue(streamAdapter.getValue());
+                    return YQLArrayType.create(valueType);
+
                 } else {
                     throw new ProgramCompileException("Unsupported core type ARRAY for non-Indexable/Iterable type %s", value);
                 }

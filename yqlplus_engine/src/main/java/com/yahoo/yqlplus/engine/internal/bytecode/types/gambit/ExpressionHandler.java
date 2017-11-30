@@ -591,10 +591,12 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
 
     @Override
     public BytecodeExpression first(Location location, BytecodeExpression inputExpr) {
-        if (!inputExpr.getType().isIterable()) {
-            throw new ProgramCompileException(location, "Unable to iterate argument to first: %s", inputExpr.getType().getTypeName());
+        if (inputExpr.getType().isIterable()) {
+            return inputExpr.getType().getIterableAdapter().first(inputExpr);
+        } else if(inputExpr.getType().isStream()) {
+            return inputExpr.getType().getStreamAdapter().first(inputExpr);
         }
-        return inputExpr.getType().getIterableAdapter().first(inputExpr);
+        throw new ProgramCompileException(location, "Unable to iterate argument to first: %s", inputExpr.getType().getTypeName());
     }
 
     @Override

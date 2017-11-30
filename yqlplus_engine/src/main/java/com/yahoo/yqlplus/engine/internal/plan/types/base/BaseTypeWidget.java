@@ -25,6 +25,7 @@ import com.yahoo.yqlplus.engine.internal.plan.types.OptionalAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.PromiseAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.ValueSequence;
 import com.yahoo.yqlplus.language.parser.Location;
@@ -324,6 +325,16 @@ public abstract class BaseTypeWidget implements TypeWidget {
                 mv.visitLabel(end);
             }
         };
+    }
+
+    @Override
+    public boolean isStream() {
+        return false;
+    }
+
+    @Override
+    public StreamAdapter getStreamAdapter() {
+        throw new UnsupportedOperationException();
     }
 
     @Override

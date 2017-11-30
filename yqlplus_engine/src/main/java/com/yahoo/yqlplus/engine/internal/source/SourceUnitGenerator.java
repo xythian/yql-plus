@@ -245,6 +245,9 @@ public class SourceUnitGenerator extends SourceApiGenerator {
             if (rowType.isIterable()) {
                 singleton = false;
                 rowType = rowType.getIterableAdapter().getValue();
+            } else if (rowType.isStream()) {
+                singleton = false;
+                rowType = rowType.getStreamAdapter().getValue();
             }
 
             if (!rowType.hasProperties()) {
