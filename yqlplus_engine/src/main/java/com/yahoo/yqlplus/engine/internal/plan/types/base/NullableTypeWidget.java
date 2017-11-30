@@ -16,11 +16,10 @@ import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.PromiseAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
-import org.objectweb.asm.Type;
 
 import java.util.List;
 
-public class NullableTypeWidget implements TypeWidget {
+public class NullableTypeWidget extends BaseTypeWidget {
     public static TypeWidget create(TypeWidget input) {
         if (input.isPrimitive()) {
             return input;
@@ -41,22 +40,13 @@ public class NullableTypeWidget implements TypeWidget {
     }
 
     private NullableTypeWidget(TypeWidget target) {
+        super(target.getJVMType());
         this.target = target;
-    }
-
-    @Override
-    public Type getJVMType() {
-        return target.getJVMType();
     }
 
     @Override
     public boolean isPrimitive() {
         return target.isPrimitive();
-    }
-
-    @Override
-    public boolean isNullable() {
-        return true;
     }
 
     @Override

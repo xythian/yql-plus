@@ -7,6 +7,7 @@
 package com.yahoo.yqlplus.engine.internal.plan.types.base;
 
 import com.yahoo.yqlplus.engine.api.PropertyNotFoundException;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.PropertyOperation;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
 import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
@@ -14,10 +15,10 @@ import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeSequence;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import org.objectweb.asm.Label;
 
-import java.util.Map;
+import java.util.List;
 
 public interface PropertyAdapter {
-    BytecodeExpression construct(Map<String, BytecodeExpression> fields);
+    BytecodeExpression construct(List<PropertyOperation> fields);
 
     boolean isClosed();
 
@@ -31,7 +32,8 @@ public interface PropertyAdapter {
 
     BytecodeSequence mergeIntoFieldWriter(BytecodeExpression target, BytecodeExpression fieldWriter);
 
-    public interface PropertyVisit {
+    @FunctionalInterface
+    interface PropertyVisit {
         void item(CodeEmitter code, BytecodeExpression propertyName, BytecodeExpression propertyValue, Label abortLoop, Label nextItem);
     }
 

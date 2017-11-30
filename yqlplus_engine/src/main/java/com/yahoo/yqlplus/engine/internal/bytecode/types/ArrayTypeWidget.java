@@ -8,30 +8,30 @@ package com.yahoo.yqlplus.engine.internal.bytecode.types;
 
 import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.NativeEncoding;
-import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ResultAdapter;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
-import com.yahoo.yqlplus.engine.internal.plan.types.*;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.IndexAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ArrayIndexAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ComparisonAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.IteratingSerializing;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.PropertyAdapter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
-import java.util.List;
-
-public class ArrayTypeWidget implements TypeWidget {
-    private final Type type;
+public class ArrayTypeWidget extends BaseTypeWidget {
     private final TypeWidget valueType;
 
     public ArrayTypeWidget(Class<?> arrayType, TypeWidget valueType) {
-        this.type = Type.getType(arrayType);
+        super(Type.getType(arrayType));
         this.valueType = valueType;
     }
 
     public ArrayTypeWidget(Type type, TypeWidget valueType) {
-        this.type = type;
+        super(type);
         this.valueType = valueType;
     }
 
@@ -42,58 +42,8 @@ public class ArrayTypeWidget implements TypeWidget {
     }
 
     @Override
-    public Type getJVMType() {
-        return type;
-    }
-
-    @Override
-    public boolean isPrimitive() {
-        return false;
-    }
-
-    @Override
-    public boolean isNullable() {
-        return true;
-    }
-
-    @Override
     public BytecodeExpression construct(BytecodeExpression... arguments) {
-        return null;
-    }
-
-    @Override
-    public Coercion coerceTo(BytecodeExpression source, TypeWidget target) {
         throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public TypeWidget boxed() {
-        return this;
-    }
-
-    @Override
-    public TypeWidget unboxed() {
-        return this;
-    }
-
-    @Override
-    public BytecodeExpression invoke(BytecodeExpression target, String methodName, List<BytecodeExpression> arguments) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public BytecodeExpression invoke(BytecodeExpression target, TypeWidget outputType, String methodName, List<BytecodeExpression> arguments) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public PropertyAdapter getPropertyAdapter() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean hasProperties() {
-        return false;
     }
 
     @Override
@@ -138,42 +88,7 @@ public class ArrayTypeWidget implements TypeWidget {
     }
 
     @Override
-    public boolean isPromise() {
-        return false;
-    }
-
-    @Override
-    public PromiseAdapter getPromiseAdapter() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean isResult() {
-        return false;
-    }
-
-    @Override
-    public ResultAdapter getResultAdapter() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public String getTypeName() {
-        return type.getDescriptor();
-    }
-
-    @Override
     public boolean isAssignableFrom(TypeWidget type) {
         return type.getValueCoreType() == YQLCoreType.ANY || getJVMType().getDescriptor().equals(type.getJVMType().getDescriptor());
-    }
-
-    @Override
-    public boolean hasUnificationAdapter() {
-        return false;
-    }
-
-    @Override
-    public UnificationAdapter getUnificationAdapter(ProgramValueTypeAdapter typeAdapter) {
-        throw new UnsupportedOperationException();
     }
 }

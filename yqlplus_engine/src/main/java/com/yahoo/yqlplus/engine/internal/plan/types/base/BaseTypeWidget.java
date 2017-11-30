@@ -10,14 +10,26 @@ import com.google.common.base.Preconditions;
 import com.yahoo.yqlplus.api.types.YQLBaseType;
 import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.NativeEncoding;
+import com.yahoo.yqlplus.engine.internal.bytecode.exprs.NullExpr;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ConstructInvocation;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.GambitCreator;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ResultAdapter;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ScopedBuilder;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
 import com.yahoo.yqlplus.engine.internal.compiler.ConstructorGenerator;
-import com.yahoo.yqlplus.engine.internal.plan.types.*;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.ExpressionTemplate;
+import com.yahoo.yqlplus.engine.internal.plan.types.IndexAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.OptionalAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.PromiseAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.ValueSequence;
 import com.yahoo.yqlplus.language.parser.Location;
-
 import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
@@ -189,28 +201,14 @@ public abstract class BaseTypeWidget implements TypeWidget {
         switch(encoding) {
             case JSON:
                 return getJsonSerializationAdapter();
-            case TBIN:
-                return getTBinSerializationAdapter();
             default:
                 throw new UnsupportedOperationException("unknown serialization type: " + encoding);
         }
     }
 
-    protected SerializationAdapter getTBinSerializationAdapter() {
-        return new SerializationAdapter() {
-            @Override
-            public BytecodeSequence serializeTo(BytecodeExpression source, BytecodeExpression generator) {
-                return BytecodeSequence.NOOP;
-            }
-
-            @Override
-            public BytecodeExpression deserializeFrom(BytecodeExpression parser) {
-                throw new UnsupportedOperationException();
-            }
-        };
+    protected SerializationAdapter getJsonSerializationAdapter() {
+        throw new TodoException();
     }
-
-    protected abstract SerializationAdapter getJsonSerializationAdapter();
 
     protected BytecodeExpression invokeNew(final Type type, BytecodeExpression... arguments) {
         return ConstructInvocation.boundInvoke(type, this, arguments).invoke(Location.NONE);
@@ -271,6 +269,59 @@ public abstract class BaseTypeWidget implements TypeWidget {
                     scope.pop(BaseTypeWidget.this);
                 }
                 scope.getMethodVisitor().visitJumpInsn(Opcodes.GOTO, isTrue);
+            }
+        };
+    }
+
+    @Override
+    public OptionalAdapter getOptionalAdapter() {
+        return new OptionalAdapter() {
+            @Override
+            public TypeWidget getResultType() {
+                return BaseTypeWidget.this;
+            }
+
+            @Override
+            public BytecodeExpression resolve(ScopedBuilder parent, BytecodeExpression target, ExpressionTemplate available, ExpressionTemplate missing) {
+                if(isNullable()) {
+                    GambitCreator.ScopeBuilder scope = parent.scope();
+                    BytecodeExpression expr = scope.evaluateInto(target);
+                    BytecodeExpression avail = available.compute(new NullCheckedEvaluatedExpression(expr));
+                    BytecodeExpression unavail = missing.compute(new NullExpr(expr.getType()));
+                    TypeWidget output = scope.unify(avail.getType(), unavail.getType());
+                    return scope.complete(new BaseTypeExpression(output) {
+                        @Override
+                        public void generate(CodeEmitter code) {
+                            Label isNull = new Label();
+                            Label end = new Label();
+                            code.gotoIfNull(expr, isNull);
+                            code.exec(avail);
+                            code.cast(output, avail.getType());
+                            code.getMethodVisitor().visitJumpInsn(Opcodes.GOTO, end);
+                            code.getMethodVisitor().visitLabel(isNull);
+                            code.exec(unavail);
+                            code.cast(output, unavail.getType());
+                            code.getMethodVisitor().visitLabel(end);
+                        }
+                    });
+                }
+                // if we know it's not nullable, then just directly evaluate the target against the available path
+                return available.compute(target);
+            }
+
+            @Override
+            public void generate(CodeEmitter code, BytecodeExpression target, ValueSequence available, ValueSequence missing) {
+                BytecodeExpression once = code.evaluateOnce(target);
+                code.exec(once);
+                Label isNull = new Label();
+                Label end = new Label();
+                MethodVisitor mv = code.getMethodVisitor();
+                mv.visitJumpInsn(Opcodes.IFNULL, isNull);
+                available.generate(code, once);
+                mv.visitJumpInsn(Opcodes.GOTO, end);
+                mv.visitLabel(isNull);
+                missing.generate(code, once);
+                mv.visitLabel(end);
             }
         };
     }

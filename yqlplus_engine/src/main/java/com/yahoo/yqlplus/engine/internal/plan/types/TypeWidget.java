@@ -69,6 +69,8 @@ public interface TypeWidget {
 
     boolean equals(Object other);
 
+    OptionalAdapter getOptionalAdapter();
+
     boolean hasUnificationAdapter();
 
     UnificationAdapter getUnificationAdapter(ProgramValueTypeAdapter typeAdapter);

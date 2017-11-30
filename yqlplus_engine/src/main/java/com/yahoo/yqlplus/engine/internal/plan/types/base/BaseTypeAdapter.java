@@ -11,13 +11,21 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.google.common.collect.ImmutableMap;
 import com.google.inject.TypeLiteral;
 import com.yahoo.yqlplus.api.trace.Timeout;
-import com.yahoo.yqlplus.api.types.*;
+import com.yahoo.yqlplus.api.types.YQLArrayType;
+import com.yahoo.yqlplus.api.types.YQLBaseType;
+import com.yahoo.yqlplus.api.types.YQLCoreType;
+import com.yahoo.yqlplus.api.types.YQLMapType;
+import com.yahoo.yqlplus.api.types.YQLOptionalType;
+import com.yahoo.yqlplus.api.types.YQLType;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
 import com.yahoo.yqlplus.engine.internal.java.types.DynamicRecordWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.*;
-
-import org.objectweb.asm.Opcodes;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeSequence;
+import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.ValueTypeAdapter;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
 import java.nio.ByteBuffer;
@@ -63,13 +71,7 @@ public class BaseTypeAdapter implements ValueTypeAdapter {
     public static final TypeWidget STRUCT = new DynamicRecordWidget();
     public static final TypeWidget ANY = AnyTypeWidget.getInstance();
 
-    public static final TypeWidget TIMEOUT_CORE = new CoreTypeWidget(Type.getType(Timeout.class), YQLCoreType.OBJECT) {
-        @Override
-        protected SerializationAdapter getJsonSerializationAdapter() {
-            throw new TodoException();
-        }
-    };
-
+    public static final TypeWidget TIMEOUT_CORE = new CoreTypeWidget(Type.getType(Timeout.class), YQLCoreType.OBJECT);
     private static final ImmutableMap<String, TypeWidget> STATIC_MAPPINGS;
     private static final ImmutableMap<YQLType, TypeWidget> YQL_MAPPINGS;
 
@@ -108,7 +110,7 @@ public class BaseTypeAdapter implements ValueTypeAdapter {
         YQL_MAPPINGS = t.build();
     }
 
-    private abstract static class CoreTypeWidget extends BaseTypeWidget {
+    private static class CoreTypeWidget extends BaseTypeWidget {
         private YQLCoreType coreType;
 
         private CoreTypeWidget(Type type, YQLCoreType coreType) {

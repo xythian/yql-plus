@@ -6,16 +6,17 @@
 
 package com.yahoo.yqlplus.engine.internal.plan.types.base;
 
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ConstructStructExpression;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.PropertyOperation;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
-import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeSequence;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
-import org.objectweb.asm.Type;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 
-import java.util.Map;
+import java.util.List;
 
 public abstract class BasePropertyAdapter implements PropertyAdapter {
     protected TypeWidget type;
@@ -25,29 +26,8 @@ public abstract class BasePropertyAdapter implements PropertyAdapter {
     }
 
     @Override
-    public final BytecodeExpression construct(final Map<String, BytecodeExpression> fields) {
-        return new BaseTypeExpression(type) {
-            @Override
-            public void generate(CodeEmitter top) {
-                CodeEmitter code = top.createScope();
-                BytecodeExpression input = code.evaluateOnce(type.construct());
-                for(Map.Entry<String, BytecodeExpression> e : fields.entrySet()) {
-                    AssignableValue out = property(input, e.getKey());
-                    BytecodeExpression value = e.getValue();
-                    if(value.getType().isNullable()) {
-                        Label nextItem = new Label();
-                        value = code.evaluateOnce(value);
-                        code.gotoIfNull(value, nextItem);
-                        code.exec(out.write(new BytecodeCastExpression(NotNullableTypeWidget.create(out.getType()), value)));
-                        code.getMethodVisitor().visitLabel(nextItem);
-                    } else {
-                        code.exec(out.write(e.getValue()));
-                    }
-                }
-                code.exec(input);
-                code.endScope();
-            }
-        };
+    public final BytecodeExpression construct(final List<PropertyOperation> fields) {
+        return new ConstructStructExpression(type, fields);
     }
 
     @Override

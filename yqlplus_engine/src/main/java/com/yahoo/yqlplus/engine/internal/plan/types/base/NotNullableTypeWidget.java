@@ -9,7 +9,18 @@ package com.yahoo.yqlplus.engine.internal.plan.types.base;
 import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.NativeEncoding;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ResultAdapter;
-import com.yahoo.yqlplus.engine.internal.plan.types.*;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ScopedBuilder;
+import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.ExpressionTemplate;
+import com.yahoo.yqlplus.engine.internal.plan.types.IndexAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.OptionalAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.PromiseAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.ValueSequence;
 import org.objectweb.asm.Type;
 
 import java.util.List;
@@ -164,5 +175,25 @@ public final class NotNullableTypeWidget implements TypeWidget {
     @Override
     public UnificationAdapter getUnificationAdapter(ProgramValueTypeAdapter typeAdapter) {
         return target.getUnificationAdapter(typeAdapter);
+    }
+
+    @Override
+    public OptionalAdapter getOptionalAdapter() {
+        return new OptionalAdapter() {
+            @Override
+            public TypeWidget getResultType() {
+                return target;
+            }
+
+            @Override
+            public BytecodeExpression resolve(ScopedBuilder scope, BytecodeExpression target, ExpressionTemplate available, ExpressionTemplate missing) {
+                return available.compute(target);
+            }
+
+            @Override
+            public void generate(CodeEmitter code, BytecodeExpression target, ValueSequence available, ValueSequence missing) {
+                available.generate(code, target);
+            }
+        };
     }
 }

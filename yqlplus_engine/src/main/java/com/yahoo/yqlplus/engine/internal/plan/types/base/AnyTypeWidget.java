@@ -12,7 +12,13 @@ import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.NativeEncoding;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ResultAdapter;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
-import com.yahoo.yqlplus.engine.internal.plan.types.*;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.IndexAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.PromiseAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -20,7 +26,7 @@ import org.objectweb.asm.Type;
 
 import java.util.List;
 
-public class AnyTypeWidget implements TypeWidget {
+public class AnyTypeWidget extends BaseTypeWidget {
     private static final Type OBJECT_TYPE = Type.getType(Object.class);
     private static final AnyTypeWidget ANY = new AnyTypeWidget();
 
@@ -29,31 +35,12 @@ public class AnyTypeWidget implements TypeWidget {
     }
 
     private AnyTypeWidget() {
-
+        super(OBJECT_TYPE);
     }
 
     @Override
     public YQLCoreType getValueCoreType() {
         return YQLCoreType.ANY;
-    }
-
-    public Type getJVMType() {
-        return OBJECT_TYPE;
-    }
-
-    @Override
-    public boolean isPrimitive() {
-        return false;
-    }
-
-    @Override
-    public TypeWidget boxed() {
-        return this;
-    }
-
-    @Override
-    public TypeWidget unboxed() {
-        return this;
     }
 
     @Override
@@ -81,11 +68,6 @@ public class AnyTypeWidget implements TypeWidget {
     @Override
     public BytecodeExpression invoke(BytecodeExpression target, TypeWidget outputType, String methodName, List<BytecodeExpression> arguments) {
         return invokeDynamic("dyn:callMethod:" + methodName, outputType, target, arguments);
-    }
-
-    @Override
-    public Coercion coerceTo(BytecodeExpression source, TypeWidget target) {
-        return null;
     }
 
     @Override
@@ -118,8 +100,6 @@ public class AnyTypeWidget implements TypeWidget {
         switch(encoding) {
             case JSON:
                 return new DynamicSerializationAdapter("yql:serialize:json", "yql:deserialize:json");
-            case TBIN:
-                return new DynamicSerializationAdapter("yql:serialize:tbin", "yql:deserialize:tbin");
             default:
                 throw new UnsupportedOperationException("Unknown NativeEncoding: " + encoding);
         }

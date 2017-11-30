@@ -10,7 +10,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.inject.Injector;
 import com.yahoo.cloud.metrics.api.MetricDimension;
 import com.yahoo.yqlplus.engine.TaskContext;
@@ -288,9 +287,9 @@ public class PhysicalExprOperatorCompiler {
                 List<String> names = expr.getArgument(1);
                 List<OperatorNode<PhysicalExprOperator>> exprs = expr.getArgument(2);
                 List<BytecodeExpression> evaluated = evaluateExpressions(program, context, exprs);
-                Map<String, BytecodeExpression> sets = Maps.newLinkedHashMap();
+                List<PropertyOperation> sets = Lists.newArrayList();
                 for (int i = 0; i < names.size(); ++i) {
-                    sets.put(names.get(i), evaluated.get(i));
+                    sets.add(new PropertyOperation(expr.getLocation(), names.get(i), evaluated.get(i)));
                 }
                 if (!recordType.hasProperties()) {
                     throw new ProgramCompileException(expr.getLocation(), "Type passed to RECORD_AS has no properties", recordType.getTypeName());
@@ -590,13 +589,13 @@ public class PhysicalExprOperatorCompiler {
         BytecodeExpression lst = adapter.addArgument("$list", NotNullableTypeWidget.create(new ListTypeWidget(AnyTypeWidget.getInstance())));
         TypeWidget keyType = BaseTypeAdapter.STRUCT;
         PropertyAdapter propertyAdapter = keyType.getPropertyAdapter();
-        Map<String, BytecodeExpression> makeFields = Maps.newLinkedHashMap();
+        List<PropertyOperation> makeFields = Lists.newArrayList();
         int i = 0;
         List<TypeWidget> keyTypes = Lists.newArrayList();
         for (String name : names) {
             TypeWidget propertyType = propertyAdapter.getPropertyType(name);
             keyTypes.add(propertyType);
-            makeFields.put(name, adapter.cast(Location.NONE, propertyType, adapter.indexValue(Location.NONE, lst, adapter.constant(i++))));
+            makeFields.add(new PropertyOperation(name, adapter.cast(Location.NONE, propertyType, adapter.indexValue(Location.NONE, lst, adapter.constant(i++)))));
         }
         adapter.exit(adapter.cast(Location.NONE, types.adapt(Record.class, false), propertyAdapter.construct(makeFields)));
         builder.setTypeWidget(new KeyCursorTypeWidget(builder.getJVMType(), names, keyType));

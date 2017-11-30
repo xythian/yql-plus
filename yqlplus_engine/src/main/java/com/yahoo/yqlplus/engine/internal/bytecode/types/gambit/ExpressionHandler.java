@@ -9,8 +9,6 @@ package com.yahoo.yqlplus.engine.internal.bytecode.types.gambit;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.PropertyNotFoundException;
 import com.yahoo.yqlplus.engine.internal.bytecode.ASMClassSource;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.ArrayTypeWidget;
@@ -29,18 +27,16 @@ import com.yahoo.yqlplus.engine.internal.operations.BinaryComparison;
 import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeSequence;
+import com.yahoo.yqlplus.engine.internal.plan.types.ExpressionTemplate;
 import com.yahoo.yqlplus.engine.internal.plan.types.IndexAdapter;
-import com.yahoo.yqlplus.engine.internal.plan.types.SerializationAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.AnyTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeExpression;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BytecodeCastExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.NotNullableTypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.NullCheckedEvaluatedExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.NullableTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.PropertyAdapter;
 import com.yahoo.yqlplus.language.parser.Location;
@@ -54,7 +50,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -79,7 +74,9 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
     }
 
     public RecordBuilder dynamicRecord() {
-        return new DynamicExpressionRecordBuilder();
+        ExpressionRecordBuilder out = new ExpressionRecordBuilder();
+        out.setDynamic(true);
+        return out;
     }
 
     AssignableValue evaluate(AssignableValue local, BytecodeExpression expr) {
@@ -654,14 +651,9 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
             throw new ProgramCompileException(loc, "Cannot reference %s.%s", target.getType().getJVMType(), propertyName);
         }
         try {
-            if (target.getType().isNullable()) {
-                ScopeBuilder guard = scope();
-                BytecodeExpression tgt = guard.evaluateInto(target);
-                final AssignableValue property = target.getType().getPropertyAdapter().property(new NullCheckedEvaluatedExpression(tgt), propertyName);
-                return guard.complete(guard.guarded(tgt, property));
-
-            }
-            return target.getType().getPropertyAdapter().property(target, propertyName);
+            return guarded(target,
+                    (e) -> e.getType().getPropertyAdapter().property(e, propertyName),
+                    (nullE) -> nullE);
         } catch (PropertyNotFoundException e) {
             throw new ProgramCompileException(loc, e.getMessage());
         }
@@ -669,49 +661,16 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
 
     @Override
     public BytecodeExpression indexValue(Location loc, BytecodeExpression target, BytecodeExpression index) {
-        if (target.getType().isNullable()) {
-            ScopeBuilder guard = scope();
-            BytecodeExpression tgt = guard.evaluateInto(target);
-            return guard.complete(guard.guarded(tgt, target.getType().getIndexAdapter().index(new NullCheckedEvaluatedExpression(tgt), index)));
-
-        }
-        return target.getType().getIndexAdapter().index(target, index);
+        return guarded(target,
+                (e) -> e.getType().getIndexAdapter().index(e, index),
+                (nullE) -> nullE);
     }
 
     @Override
-    public BytecodeExpression guarded(final BytecodeExpression target, final BytecodeExpression ifTargetIsNotNull) {
-        Preconditions.checkNotNull(target);
-        Preconditions.checkNotNull(ifTargetIsNotNull);
-        if (!target.getType().isNullable()) {
-            return ifTargetIsNotNull;
-        }
-        return new NullGuardedExpression(target, ifTargetIsNotNull);
+    public BytecodeExpression guarded(BytecodeExpression input, ExpressionTemplate available, ExpressionTemplate missing) {
+        return input.getType().getOptionalAdapter().resolve(this, input, available, missing);
     }
 
-    @Override
-    public BytecodeExpression guarded(final BytecodeExpression target, final BytecodeExpression ifTargetIsNotNull, final BytecodeExpression ifTargetIsNull) {
-        if (!target.getType().isNullable()) {
-            return ifTargetIsNotNull;
-        }
-        return new BaseTypeExpression(unify(ifTargetIsNotNull.getType(), ifTargetIsNull.getType())) {
-            @Override
-            public void generate(CodeEmitter code) {
-                final MethodVisitor mv = code.getMethodVisitor();
-                Label isNull = new Label();
-                Label done = new Label();
-                code.exec(target);
-                code.nullTest(target.getType(), isNull);
-                code.pop(target.getType());
-                code.exec(ifTargetIsNotNull);
-                code.cast(getType(), ifTargetIsNotNull.getType(), isNull);
-                mv.visitJumpInsn(Opcodes.GOTO, done);
-                mv.visitLabel(isNull);
-                code.exec(ifTargetIsNull);
-                code.cast(getType(), ifTargetIsNull.getType());
-                mv.visitLabel(done);
-            }
-        };
-    }
 
     @Override
     public AssignableValue propertyRef(Location loc, BytecodeExpression target, String propertyName) {
@@ -737,6 +696,7 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
 
     @Override
     public BytecodeExpression fallback(Location loc, final BytecodeExpression primary, final BytecodeExpression caught) {
+        tryCatchFinally();
         TypeWidget unified = unify(primary.getType(), caught.getType());
         return new BaseTypeExpression(unified) {
             @Override
@@ -848,124 +808,65 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
         }
     }
 
-    private static final TypeWidget mapFieldWriter = new BaseTypeWidget(Type.getType(MapFieldWriter.class)) {
-        @Override
-        public YQLCoreType getValueCoreType() {
-            return YQLCoreType.OBJECT;
-        }
-
-        @Override
-        protected SerializationAdapter getJsonSerializationAdapter() {
-            throw new UnsupportedOperationException();
-        }
-    };
     private static final TypeWidget mapType = new MapTypeWidget(Type.getType(RecordMapWrapper.class), BaseTypeAdapter.STRING, BaseTypeAdapter.ANY);
 
 
-    private class DynamicOperation {
-        final String fieldName;
-        final BytecodeExpression value;
-
-        public DynamicOperation(String fieldName, BytecodeExpression value) {
-            this.fieldName = fieldName;
-            this.value = value;
-        }
-    }
-
-    private class DynamicExpressionRecordBuilder implements RecordBuilder {
-        private final List<DynamicOperation> operationNodes = Lists.newArrayList();
-
-        @Override
-        public RecordBuilder add(Location loc, String fieldName, BytecodeExpression input) {
-            operationNodes.add(new DynamicOperation(fieldName, input));
-            return this;
-        }
-
-        @Override
-        public RecordBuilder merge(Location loc, BytecodeExpression recordType) {
-            operationNodes.add(new DynamicOperation("", recordType));
-            return this;
-        }
-
-        @Override
-        public BytecodeExpression build() {
-            return new BaseTypeExpression(mapType) {
-                @Override
-                public void generate(CodeEmitter code) {
-                    AssignableValue map = code.allocate(mapType.construct());
-                    PropertyAdapter adapter = map.getType().getPropertyAdapter();
-                    AssignableValue writer = code.allocate(mapFieldWriter.construct(new BytecodeCastExpression(new MapTypeWidget(Type.getType(Map.class), BaseTypeAdapter.STRING, BaseTypeAdapter.ANY), map)));
-                    for(DynamicOperation op : operationNodes) {
-                        if("".equals(op.fieldName)) {
-                            BytecodeExpression value = op.value;
-                            code.exec(value.getType().getPropertyAdapter().mergeIntoFieldWriter(value, writer));
-                        } else {
-                            String fieldName = op.fieldName;
-                            BytecodeExpression value = op.value;
-                            code.exec(adapter.property(map, fieldName).write(value));
-                        }
-                    }
-                    code.exec(map.read());
-                }
-            };
-        }
-    }
 
     private class ExpressionRecordBuilder implements RecordBuilder {
         private boolean dynamic = false;
-        private RecordBuilder dynamicBuilder = null;
+        private final List<PropertyOperation> operationNodes = Lists.newArrayList();
 
-        private final Map<String, BytecodeExpression> fieldSettings = Maps.newLinkedHashMap();
-        private final StructBuilder staticStructBuilder = createStruct();
+        void setDynamic(boolean dynamic) {
+            this.dynamic = dynamic;
+        }
 
         @Override
         public RecordBuilder add(Location loc, String fieldName, BytecodeExpression input) {
-            if(dynamic) {
-                dynamicBuilder.add(loc, fieldName, input);
-                return this;
-            }
-            fieldSettings.put(fieldName, input);
-            staticStructBuilder.add(fieldName, input.getType());
+            operationNodes.add(new PropertyOperation(loc, fieldName, input));
             return this;
         }
 
         @Override
         public RecordBuilder merge(Location loc, BytecodeExpression recordType) {
-            if(dynamic) {
-                dynamicBuilder.merge(loc, recordType);
-                return this;
-            }
             TypeWidget inputType = recordType.getType();
             if(!inputType.hasProperties()) {
                 throw new UnsupportedOperationException("RecordBuilder.merge must take an argument with properties (e.g. a struct/record)");
             }
-            PropertyAdapter inputProperties = inputType.getPropertyAdapter();
-            if(!inputProperties.isClosed()) {
-                // reset and convert ourselves to dynamic
-                dynamic = true;
-                dynamicBuilder = new DynamicExpressionRecordBuilder();
-                // merge all of our existing properties to the dynamic builder
-                for(Map.Entry<String, BytecodeExpression> field : fieldSettings.entrySet()) {
-                    dynamicBuilder.add(Location.NONE, field.getKey(), field.getValue());
-                }
-                dynamicBuilder.merge(loc, recordType);
-                return this;
-            }
-            for(PropertyAdapter.Property property : inputProperties.getProperties()) {
-
-                add(loc, property.name, guarded(recordType, inputProperties.property(recordType, property.name)));
-            }
+            operationNodes.add(new PropertyOperation(loc, "", recordType));
             return this;
         }
 
         @Override
         public BytecodeExpression build() {
-            if(dynamic) {
-                return dynamicBuilder.build();
+            if(!dynamic) {
+                StructBuilder staticStructBuilder = createStruct();
+                for(PropertyOperation op : operationNodes) {
+                    if("".equals(op.fieldName)) {
+                        BytecodeExpression recordType = op.value;
+                        TypeWidget inputType = recordType.getType().getOptionalAdapter().getResultType();
+                        if(!inputType.hasProperties()) {
+                            throw new UnsupportedOperationException("RecordBuilder.merge must take an argument with properties (e.g. a struct/record)");
+                        }
+
+                        PropertyAdapter inputProperties = inputType.getPropertyAdapter();
+                        if(!inputProperties.isClosed()) {
+                            dynamic = true;
+                            break;
+                        }
+
+                        for(PropertyAdapter.Property property : inputProperties.getProperties()) {
+                            staticStructBuilder.add(property.name, property.type);
+                        }
+                    } else {
+                        staticStructBuilder.add(op.fieldName, op.value.getType());
+                    }
+                }
+                if(!dynamic) {
+                    TypeWidget structType = staticStructBuilder.build();
+                    return new ConstructStructExpression(structType, operationNodes);
+                }
             }
-            return staticStructBuilder.build()
-                    .getPropertyAdapter()
-                    .construct(fieldSettings);
+            return new ConstructStructExpression(mapType, operationNodes);
         }
     }
 }

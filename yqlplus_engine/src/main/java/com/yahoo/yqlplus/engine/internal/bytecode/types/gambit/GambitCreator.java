@@ -11,6 +11,7 @@ import com.yahoo.yqlplus.engine.internal.operations.BinaryComparison;
 import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeSequence;
+import com.yahoo.yqlplus.engine.internal.plan.types.ExpressionTemplate;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import com.yahoo.yqlplus.language.parser.Location;
 
@@ -129,9 +130,7 @@ public interface GambitCreator extends GambitTypes {
 
     BytecodeExpression coalesce(Location loc, List<BytecodeExpression> inputs);
 
-    BytecodeExpression guarded(BytecodeExpression target, BytecodeExpression ifTargetIsNotNull);
-
-    BytecodeExpression guarded(BytecodeExpression target, BytecodeExpression ifTargetIsNotNull, BytecodeExpression ifTargetIsNull);
+    BytecodeExpression guarded(BytecodeExpression input, ExpressionTemplate available, ExpressionTemplate missing);
 
     BytecodeExpression list(TypeWidget elementType);
 
