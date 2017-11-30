@@ -16,12 +16,18 @@ import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.FutureResultType;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ListenableFutureResultType;
 import com.yahoo.yqlplus.engine.internal.plan.types.ProgramValueTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.*;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.OptionalTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.ReflectiveJavaTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.ReflectiveTypeAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.TypeAdaptingWidget;
 
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
@@ -104,6 +110,18 @@ public class ASMClassSourceModule extends AbstractModule {
                 return new ReflectiveJavaTypeWidget(typeAdapter, Provider.class);
             }
         });
+        binder.addBinding().toInstance(new TypeAdaptingWidget() {
+            @Override
+            public boolean supports(Class<?> clazzType) {
+                return Optional.class.isAssignableFrom(clazzType);
+            }
+
+            @Override
+            public TypeWidget adapt(ProgramValueTypeAdapter typeAdapter, Type type) {
+                return OptionalTypeWidget.create(typeAdapter.adaptInternal(JVMTypes.getTypeArgument(type, 0)));
+            }
+        });
+
         bind(TypeAdaptingWidget.class).to(ReflectiveTypeAdapter.class);
     }
 
@@ -114,23 +132,4 @@ public class ASMClassSourceModule extends AbstractModule {
         }
         return org.objectweb.asm.Type.getType(clazz);
     }
-
-//    @Provides
-//    @Singleton
-//    @Named("engineSource")
-//    ASMClassSource provideEngineSource(Set<TypeAdaptingWidget> adapters, TypeAdaptingWidget defaultTypeAdapter) {
-//        return new ASMClassSource(adapters, defaultTypeAdapter);
-//    }
-//
-//    @Provides
-//    EngineValueTypeAdapter provideEngineAdapter(@Named("engineSource") ASMClassSource engineSource) {
-//        return engineSource.getValueTypeAdapter();
-//    }
-//
-//    @Provides
-//    ASMClassSource provideWorkService(@Named("engineSource") ASMClassSource engineSource) {
-//        return engineSource.createChildSource();
-//    }
-
-
 }
