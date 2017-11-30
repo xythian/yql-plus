@@ -210,8 +210,4 @@ public interface GambitCreator extends GambitTypes {
 
     BytecodeExpression resolve(Location loc, BytecodeExpression timeout, BytecodeExpression promise);
 
-    // Invocable should take one argument: a promise to be resolved (resolving will not block)
-    BytecodeExpression resolveLater(Location loc, BytecodeExpression timeout, BytecodeExpression promise, Invocable callback);
-
-    BytecodeExpression resolveLater(Location loc, BytecodeExpression timeout, BytecodeExpression promise, Invocable success, Invocable failure);
 }

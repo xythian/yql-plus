@@ -739,16 +739,6 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
     }
 
     @Override
-    public BytecodeExpression resolveLater(Location loc, BytecodeExpression timeout, BytecodeExpression promise, Invocable callback) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public BytecodeExpression resolveLater(Location loc, BytecodeExpression timeout, BytecodeExpression promise, Invocable success, Invocable failure) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public CatchBuilder tryCatchFinally() {
         return new BytecodeCatchBuilder(source, body);
     }
