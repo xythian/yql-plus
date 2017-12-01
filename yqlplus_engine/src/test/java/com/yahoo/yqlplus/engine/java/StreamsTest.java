@@ -61,7 +61,17 @@ public class StreamsTest extends CompilingTestBase {
                 .parallel()
                 .flatMap(z -> ImmutableList.of(z, z).stream());
         List<String>  target = x.collect(Collectors.toList());
+        System.err.println(target);
+    }
 
+    @Test
+    public void exploreStreamApis2() throws Exception {
+        List<String> items = ImmutableList.of("a", "b", "c", "d");
+        Stream<String> x = items.stream()
+                .distinct()
+                .parallel()
+                .flatMap(z -> ImmutableList.of(z, z).stream());
+        List<String>  target = x.collect(Collectors.toList());
         System.err.println(target);
     }
 

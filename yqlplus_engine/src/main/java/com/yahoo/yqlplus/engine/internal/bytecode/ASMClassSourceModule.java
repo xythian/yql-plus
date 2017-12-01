@@ -21,6 +21,7 @@ import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.OptionalTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ReflectiveJavaTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ReflectiveTypeAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.StreamTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.TypeAdaptingWidget;
 
 import java.lang.reflect.Modifier;
@@ -30,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 
 public class ASMClassSourceModule extends AbstractModule {
     @Override
@@ -74,6 +76,19 @@ public class ASMClassSourceModule extends AbstractModule {
                     return new CompletableFutureResultType(valueType);
                 }
                 return new FutureResultType(valueType);
+            }
+        });
+        binder.addBinding().toInstance(new TypeAdaptingWidget() {
+            @Override
+            public boolean supports(Class<?> clazzType) {
+                return Stream.class.isAssignableFrom(clazzType);
+            }
+
+            @Override
+            public TypeWidget adapt(ProgramValueTypeAdapter typeAdapter, Type type) {
+                TypeWidget valueType = typeAdapter.adaptInternal(JVMTypes.getTypeArgument(type, 0));
+                Class<?> rawType = JVMTypes.getRawType(type);
+                return new StreamTypeWidget(rawType, valueType);
             }
         });
         binder.addBinding().toInstance(new RecordAdaptingWidget());

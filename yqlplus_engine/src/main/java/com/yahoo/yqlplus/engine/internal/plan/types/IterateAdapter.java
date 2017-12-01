@@ -18,6 +18,10 @@ public interface IterateAdapter {
 
     BytecodeExpression first(BytecodeExpression target);
 
+    BytecodeExpression streamFlattener();
+
+    BytecodeExpression toStream(BytecodeExpression target);
+
     public interface IterateLoop {
         void item(CodeEmitter code, BytecodeExpression item, Label abortLoop, Label nextItem);
     }

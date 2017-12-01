@@ -7,6 +7,7 @@
 package com.yahoo.yqlplus.engine.internal.bytecode.types.gambit;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -39,7 +40,6 @@ import com.yahoo.yqlplus.engine.internal.plan.types.base.AnyTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BytecodeCastExpression;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.InvokeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.NotNullableTypeWidget;
@@ -59,7 +59,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 public class PhysicalExprOperatorCompiler {
@@ -503,7 +503,63 @@ public class PhysicalExprOperatorCompiler {
         return builder.complete(result);
     }
 
-    private TypeWidget compileComparator(TypeWidget programType, TypeWidget contextType, TypeWidget itemType, OperatorNode<FunctionOperator> function) {
+
+    static class LambdaCallable {
+        private final TypeWidget lambda;
+        private final TypeWidget resultType;
+
+        public LambdaCallable(TypeWidget lambda, TypeWidget resultType) {
+            this.lambda = lambda;
+            this.resultType = resultType;
+        }
+
+        public TypeWidget getLambda() {
+            return lambda;
+        }
+
+        public BytecodeExpression create(BytecodeExpression program, BytecodeExpression contextExpr) {
+            return lambda.construct(program, contextExpr);
+        }
+
+        public TypeWidget getResultType() {
+            return resultType;
+        }
+    }
+
+    private LambdaCallable compilePredicate(TypeWidget programType, TypeWidget contextType, TypeWidget itemType, OperatorNode<FunctionOperator> function) {
+        List<String> argumentNames = function.getArgument(0);
+        OperatorNode<PhysicalExprOperator> functionBody = function.getArgument(1);
+        ObjectBuilder builder = this.scope.createObject();
+        builder.implement(Predicate.class);
+        builder.addParameter("$program", programType);
+        builder.addParameter("$context", contextType);
+        ObjectBuilder.MethodBuilder apply = builder.method("apply");
+        BytecodeExpression leftExpr = apply.addArgument("$item$", AnyTypeWidget.getInstance());
+        apply.evaluateInto(argumentNames.get(0),
+                apply.cast(function.getLocation(), itemType, leftExpr));
+        PhysicalExprOperatorCompiler compiler = new PhysicalExprOperatorCompiler(apply);
+        BytecodeExpression result = compiler.evaluateExpression(apply.local("$program"), apply.local("$context"), functionBody);
+        apply.exit(result);
+        return new LambdaCallable(builder.type(), result.getType());
+    }
+
+    private LambdaCallable compileFunctionLambda(TypeWidget programType, TypeWidget contextType, TypeWidget itemType, OperatorNode<FunctionOperator> function) {
+        List<String> argumentNames = function.getArgument(0);
+        OperatorNode<PhysicalExprOperator> functionBody = function.getArgument(1);
+        ObjectBuilder builder = this.scope.createObject();
+        builder.implement(Function.class);
+        builder.addParameter("$program", programType);
+        builder.addParameter("$context", contextType);
+        ObjectBuilder.MethodBuilder apply = builder.method("apply");
+        BytecodeExpression leftExpr = apply.addArgument("$item$", AnyTypeWidget.getInstance());
+        apply.evaluateInto(argumentNames.get(0),
+                apply.cast(function.getLocation(), itemType, leftExpr));
+        PhysicalExprOperatorCompiler compiler = new PhysicalExprOperatorCompiler(apply);
+        BytecodeExpression result = compiler.evaluateExpression(apply.local("$program"), apply.local("$context"), functionBody);
+        apply.exit(apply.cast(Location.NONE, AnyTypeWidget.getInstance(), result));
+        return new LambdaCallable(builder.type(), result.getType());
+    }
+    private LambdaCallable compileComparator(TypeWidget programType, TypeWidget contextType, TypeWidget itemType, OperatorNode<FunctionOperator> function) {
         // TODO Comparator.class - int compare(Object left, Object right);
         List<String> argumentNames = function.getArgument(0);
         OperatorNode<PhysicalExprOperator> functionBody = function.getArgument(1);
@@ -521,7 +577,7 @@ public class PhysicalExprOperatorCompiler {
         PhysicalExprOperatorCompiler compiler = new PhysicalExprOperatorCompiler(compareMethod);
         BytecodeExpression result = compiler.evaluateExpression(compareMethod.local("$program"), compareMethod.local("$context"), functionBody);
         compareMethod.exit(result);
-        return builder.type();
+        return new LambdaCallable(builder.type(), result.getType());
     }
 
 
@@ -583,19 +639,15 @@ public class PhysicalExprOperatorCompiler {
             streamPipeline.item(iterateBuilder, iterateBuilder.getItem());
             return streamPipeline.end(scope, iterateBuilder);
         } else if (streamInput.getType().isStream()) {
-            return compileStreamExpression(program, ctxExpr, stream, streamInput);
+            return compileStreamExpression(scope, program, ctxExpr, stream, streamInput.getType().getStreamAdapter().skipNulls(streamInput));
          } else {
             throw new UnsupportedOperationException("streamExecute argument must be iterable; type is " + streamInput.getType());
 
         }
     }
 
-    private BytecodeExpression compileStreamExpression(BytecodeExpression program, BytecodeExpression ctxExpr, OperatorNode<StreamOperator> streamOperator, BytecodeExpression streamInput) {
+    private BytecodeExpression compileStreamExpression(GambitCreator.ScopeBuilder scope, BytecodeExpression program, BytecodeExpression ctxExpr, OperatorNode<StreamOperator> streamOperator, BytecodeExpression streamInput) {
         StreamAdapter adapter = streamInput.getType().getStreamAdapter();
-        return compileStreamExpression(adapter, program,  ctxExpr, streamOperator, streamInput);
-    }
-
-    private BytecodeExpression compileStreamExpression(StreamAdapter adapter, BytecodeExpression program, BytecodeExpression ctxExpr, OperatorNode<StreamOperator> streamOperator, BytecodeExpression streamInput) {
         if (streamOperator.getOperator() == StreamOperator.SINK) {
             OperatorNode<SinkOperator> sink = streamOperator.getArgument(0);
             switch (sink.getOperator()) {
@@ -610,42 +662,58 @@ public class PhysicalExprOperatorCompiler {
                     throw new UnsupportedOperationException("Unknown SINK operator: " + sink);
             }
         }
-        StreamSink next = compileStream(program, ctxExpr, streamOperator.<OperatorNode<StreamOperator>>getArgument(0));
+        OperatorNode<StreamOperator> nextStream = streamOperator.getArgument(0);
         switch (streamOperator.getOperator()) {
             case TRANSFORM: {
                 OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
-                return new TransformSink(next, function);
+                LambdaCallable functionType = compileFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), function);
+                BytecodeExpression filtered = adapter.transform(streamInput, functionType.create(program, ctxExpr), functionType.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, filtered);
             }
             case SCATTER: {
                 OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
-                return new ScatterSink(next, function);
+                LambdaCallable functionType = compileFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), function);
+                BytecodeExpression filtered = adapter.scatter(streamInput, functionType.create(program, ctxExpr), functionType.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, filtered);
             }
             case DISTINCT: {
-                return new DistinctSink(next, streamOperator.getLocation());
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, adapter.distinct(streamInput));
             }
             case FLATTEN: {
-                return new FlattenSink(next);
+                BytecodeExpression flattened = adapter.flatten(streamInput);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, flattened);
             }
             case FILTER: {
                 OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
-                return new FilterSink(next, function);
+                LambdaCallable predicateType = compilePredicate(program.getType(), ctxExpr.getType(), adapter.getValue(), function);
+                BytecodeExpression filtered = adapter.filter(streamInput, predicateType.create(program, ctxExpr));
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, filtered);
             }
             case OFFSET: {
                 OperatorNode<PhysicalExprOperator> offset = streamOperator.getArgument(1);
-                return new SliceSink(next, null, offset);
+                BytecodeExpression offsetExpression = evaluateExpression(program, ctxExpr, offset);
+                BytecodeExpression offsetStream = adapter.offset(streamInput, offsetExpression);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, offsetStream);
             }
             case LIMIT: {
                 OperatorNode<PhysicalExprOperator> limit = streamOperator.getArgument(1);
-                return new SliceSink(next, limit, null);
+                BytecodeExpression limitExpression = evaluateExpression(program, ctxExpr, limit);
+                BytecodeExpression limitStream = adapter.limit(streamInput, limitExpression);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, limitStream);
             }
             case SLICE: {
                 OperatorNode<PhysicalExprOperator> offset = streamOperator.getArgument(1);
                 OperatorNode<PhysicalExprOperator> limit = streamOperator.getArgument(2);
-                return new SliceSink(next, limit, offset);
+                BytecodeExpression offsetExpression = evaluateExpression(program, ctxExpr, offset);
+                BytecodeExpression limitExpression = evaluateExpression(program, ctxExpr, limit);
+                BytecodeExpression offsetStream = adapter.offset(streamInput, offsetExpression);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, offsetStream.getType().getStreamAdapter().limit(offsetStream, limitExpression));
             }
             case ORDERBY: {
                 OperatorNode<FunctionOperator> comparator = streamOperator.getArgument(1);
-                return new SortSink(next, comparator);
+                LambdaCallable functionType = compileComparator(program.getType(), ctxExpr.getType(), adapter.getValue(), comparator);
+                BytecodeExpression sorted = adapter.sorted(streamInput, functionType.create(program, ctxExpr));
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, sorted);
             }
             case GROUPBY: {
                 OperatorNode<FunctionOperator> key = streamOperator.getArgument(1);

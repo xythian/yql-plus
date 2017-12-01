@@ -9,10 +9,18 @@ package com.yahoo.yqlplus.engine.internal.java.backends.java;
 import com.google.common.collect.Lists;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
+import java.util.function.BinaryOperator;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
-public class RecordAccumulator<OUTPUT> {
+public class RecordAccumulator<OUTPUT> implements Consumer<OUTPUT> {
     private final ConcurrentLinkedQueue<Object> rows = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean done = new AtomicBoolean(false);
 
@@ -26,6 +34,11 @@ public class RecordAccumulator<OUTPUT> {
 
     protected List<OUTPUT> finish(List candidate) {
         return candidate;
+    }
+
+    @Override
+    public void accept(OUTPUT output) {
+        receive(output);
     }
 
     public boolean receive(Object row) {

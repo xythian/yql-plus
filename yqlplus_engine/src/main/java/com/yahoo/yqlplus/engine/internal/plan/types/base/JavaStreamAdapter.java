@@ -6,9 +6,21 @@
 
 package com.yahoo.yqlplus.engine.internal.plan.types.base;
 
+import com.google.common.collect.ImmutableList;
+import com.yahoo.yqlplus.engine.internal.java.backends.java.StreamsSupport;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.Opcodes;
+
+import java.util.Comparator;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class JavaStreamAdapter implements StreamAdapter {
     private final TypeWidget valueType;
@@ -25,5 +37,166 @@ public class JavaStreamAdapter implements StreamAdapter {
     @Override
     public BytecodeExpression first(BytecodeExpression target) {
         return new StreamFirstSequence(target, valueType);
+    }
+
+    @Override
+    public BytecodeExpression collectList(BytecodeExpression streamInput) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "collect",
+                Type.getMethodDescriptor(Type.getType(Object.class), Type.getType(Collector.class)),
+                new ListTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        new InvokeExpression(Collectors.class,
+                                Opcodes.INVOKESTATIC,
+                                "toList",
+                                Type.getMethodDescriptor(Type.getType(Collector.class)),
+                                AnyTypeWidget.getInstance(),
+                                null,
+                                ImmutableList.of()
+                        )
+                ));
+    }
+
+    @Override
+    public BytecodeExpression streamInto(BytecodeExpression streamInput, BytecodeExpression targetExpression) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "forEach",
+                Type.getMethodDescriptor(Type.VOID_TYPE, Type.getType(Consumer.class)),
+                new ListTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        targetExpression
+                ));
+    }
+
+    @Override
+    public BytecodeExpression flatten(BytecodeExpression streamInput) {
+        if (!valueType.isIterable()) {
+            throw new UnsupportedOperationException("Cannot flatten a Stream of non-iterable values");
+        }
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "flatMap",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Function.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        valueType.getIterableAdapter().streamFlattener()
+                ));
+    }
+
+    @Override
+    public BytecodeExpression offset(BytecodeExpression streamInput, BytecodeExpression offsetExpression) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "skip",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(long.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        new BytecodeCastExpression(BaseTypeAdapter.INT64, offsetExpression)
+                ));
+    }
+
+    @Override
+    public BytecodeExpression limit(BytecodeExpression streamInput, BytecodeExpression limitExpression) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "limit",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(long.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        new BytecodeCastExpression(BaseTypeAdapter.INT64, limitExpression)
+                ));
+    }
+
+    @Override
+    public BytecodeExpression distinct(BytecodeExpression streamInput) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "distinct",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(long.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of());
+    }
+
+    @Override
+    public BytecodeExpression skipNulls(BytecodeExpression streamInput) {
+        if(valueType.isNullable()) {
+            return new InvokeExpression(Stream.class,
+                    Opcodes.INVOKEINTERFACE,
+                    "filter",
+                    Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Predicate.class)),
+                    new StreamTypeWidget(NotNullableTypeWidget.create(valueType)),
+                    streamInput,
+                    ImmutableList.of(
+                            new InvokeExpression(StreamsSupport.class,
+                                    Opcodes.INVOKESTATIC,
+                                    "skipNulls",
+                                    Type.getMethodDescriptor(Type.getType(Function.class)),
+                                    new FunctionTypeWidget(),
+                                    null,
+                                    ImmutableList.of())
+
+                    ));
+        }
+        return streamInput;
+    }
+
+    @Override
+    public BytecodeExpression filter(BytecodeExpression streamInput, BytecodeExpression predicate) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "filter",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Predicate.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        predicate
+                ));
+    }
+
+    @Override
+    public BytecodeExpression transform(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget resultValueType) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "map",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Function.class)),
+                new StreamTypeWidget(resultValueType),
+                streamInput,
+                ImmutableList.of(
+                        function
+                ));
+    }
+
+    @Override
+    public BytecodeExpression scatter(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget resultValueType) {
+        BytecodeExpression parallel = new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "parallel",
+                Type.getMethodDescriptor(Type.getType(Stream.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                ));
+        return transform(parallel, function, resultValueType);
+    }
+
+    @Override
+    public BytecodeExpression sorted(BytecodeExpression streamInput, BytecodeExpression comparator) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "sorted",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Comparator.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        comparator
+                ));
     }
 }

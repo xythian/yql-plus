@@ -6,7 +6,14 @@
 
 package com.yahoo.yqlplus.engine.internal.plan.types.base;
 
+import com.google.common.collect.ImmutableList;
+import com.yahoo.yqlplus.engine.internal.java.backends.java.StreamsSupport;
 import com.yahoo.yqlplus.engine.internal.plan.types.*;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.Opcodes;
+
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 public class JavaIterableAdapter implements IterateAdapter {
     private final TypeWidget valueType;
@@ -33,5 +40,27 @@ public class JavaIterableAdapter implements IterateAdapter {
     @Override
     public BytecodeExpression first(BytecodeExpression target) {
         return new IterateFirstSequence(target, valueType);
+    }
+
+    @Override
+    public BytecodeExpression streamFlattener() {
+        return new InvokeExpression(StreamsSupport.class,
+                Opcodes.INVOKESTATIC,
+                "collectionFlattener",
+                Type.getMethodDescriptor(Type.getType(Function.class)),
+                new FunctionTypeWidget(),
+                null,
+                ImmutableList.of());
+    }
+
+    @Override
+    public BytecodeExpression toStream(BytecodeExpression target) {
+        return new InvokeExpression(StreamsSupport.class,
+                Opcodes.INVOKESTATIC,
+                "toStream",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Iterable.class)),
+                new StreamTypeWidget(valueType),
+                null,
+                ImmutableList.of(target));
     }
 }

@@ -132,4 +132,9 @@ public class ArrayIndexAdapter implements IndexAdapter, IterateAdapter {
             }
         };
     }
+
+    @Override
+    public BytecodeExpression streamFlattener() {
+        throw new UnsupportedOperationException("Arrays cannot currently be converted to stream flatteners; use a Collection");
+    }
 }

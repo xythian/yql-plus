@@ -109,6 +109,11 @@ public class MapTypeWidget extends BaseTypeWidget {
         public BytecodeExpression first(BytecodeExpression target) {
             return entryIterator.first(new InvokeExpression(Map.class, "entrySet", new SetTypeWidget(entryIterator.getValue()), target, ImmutableList.<BytecodeExpression>of()));
         }
+
+        @Override
+        public BytecodeExpression streamFlattener() {
+            return entryIterator.streamFlattener();
+        }
     }
 
     @Override
