@@ -25,4 +25,10 @@ public interface StreamAdapter {
     BytecodeExpression scatter(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget valueType);
 
     BytecodeExpression sorted(BytecodeExpression streamInput, BytecodeExpression comparator);
+
+    BytecodeExpression groupBy(BytecodeExpression streamInput, BytecodeExpression keyFunction, BytecodeExpression groupFunction, TypeWidget valueType);
+
+    BytecodeExpression cross(BytecodeExpression streamInput, BytecodeExpression rightIterable, BytecodeExpression crossFunction, TypeWidget resultType);
+
+    BytecodeExpression hashJoin(BytecodeExpression streamInput, boolean outer, BytecodeExpression rightExpr, BytecodeExpression leftKeyFunction, BytecodeExpression rightKeyFunction, BytecodeExpression joinFunction, TypeWidget resultType);
 }

@@ -31,36 +31,17 @@ import com.yahoo.yqlplus.engine.internal.plan.ast.PhysicalExprOperator;
 import com.yahoo.yqlplus.engine.internal.plan.ast.PhysicalProjectOperator;
 import com.yahoo.yqlplus.engine.internal.plan.streams.SinkOperator;
 import com.yahoo.yqlplus.engine.internal.plan.streams.StreamOperator;
-import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
-import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
-import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
-import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
-import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.AnyTypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeExpression;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.BytecodeCastExpression;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.NotNullableTypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.NullableTypeWidget;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.PropertyAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.*;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.*;
 import com.yahoo.yqlplus.language.operator.OperatorNode;
 import com.yahoo.yqlplus.language.parser.Location;
 import com.yahoo.yqlplus.language.parser.ProgramCompileException;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 public class PhysicalExprOperatorCompiler {
     public static final MetricDimension EMPTY_DIMENSION = new MetricDimension();
@@ -559,6 +540,27 @@ public class PhysicalExprOperatorCompiler {
         apply.exit(apply.cast(Location.NONE, AnyTypeWidget.getInstance(), result));
         return new LambdaCallable(builder.type(), result.getType());
     }
+
+    private LambdaCallable compileBiFunctionLambda(TypeWidget programType, TypeWidget contextType, TypeWidget arg1Type, TypeWidget arg2Type, OperatorNode<FunctionOperator> function) {
+        List<String> argumentNames = function.getArgument(0);
+        OperatorNode<PhysicalExprOperator> functionBody = function.getArgument(1);
+        ObjectBuilder builder = this.scope.createObject();
+        builder.implement(BiFunction.class);
+        builder.addParameter("$program", programType);
+        builder.addParameter("$context", contextType);
+        ObjectBuilder.MethodBuilder apply = builder.method("apply");
+        BytecodeExpression arg1Expr = apply.addArgument("$arg1", AnyTypeWidget.getInstance());
+        BytecodeExpression arg2Expr = apply.addArgument("$arg2", AnyTypeWidget.getInstance());
+        apply.evaluateInto(argumentNames.get(0),
+                apply.cast(function.getLocation(), arg1Type, arg2Expr));
+        apply.evaluateInto(argumentNames.get(1),
+                apply.cast(function.getLocation(), arg2Type, arg2Expr));
+        PhysicalExprOperatorCompiler compiler = new PhysicalExprOperatorCompiler(apply);
+        BytecodeExpression result = compiler.evaluateExpression(apply.local("$program"), apply.local("$context"), functionBody);
+        apply.exit(apply.cast(Location.NONE, AnyTypeWidget.getInstance(), result));
+        return new LambdaCallable(builder.type(), result.getType());
+    }
+
     private LambdaCallable compileComparator(TypeWidget programType, TypeWidget contextType, TypeWidget itemType, OperatorNode<FunctionOperator> function) {
         // TODO Comparator.class - int compare(Object left, Object right);
         List<String> argumentNames = function.getArgument(0);
@@ -718,20 +720,39 @@ public class PhysicalExprOperatorCompiler {
             case GROUPBY: {
                 OperatorNode<FunctionOperator> key = streamOperator.getArgument(1);
                 OperatorNode<FunctionOperator> output = streamOperator.getArgument(2);
-                return new GroupbySink(next, key, output);
+                LambdaCallable keyFunction = compileFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), key);
+                LambdaCallable outputFunction = compileBiFunctionLambda(program.getType(), ctxExpr.getType(), keyFunction.resultType, new ListTypeWidget(adapter.getValue()), output);
+                BytecodeExpression grouped = adapter.groupBy(streamInput, keyFunction.create(program, ctxExpr), outputFunction.create(program, ctxExpr), outputFunction.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, grouped);
             }
             case CROSS: {
                 OperatorNode<PhysicalExprOperator> right = streamOperator.getArgument(1);
+                BytecodeExpression rightExpr = evaluateExpression(program, ctxExpr, right);
                 OperatorNode<FunctionOperator> output = streamOperator.getArgument(2);
-                return new CrossSink(next, right, output);
+                LambdaCallable outputFunction = compileBiFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), rightExpr.getType().getIterableAdapter().getValue(), output);
+                BytecodeExpression crossed = adapter.cross(streamInput, rightExpr, outputFunction.create(program, ctxExpr), outputFunction.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, crossed);
             }
             case OUTER_HASH_JOIN:
             case HASH_JOIN: {
+                // TODO: we should support a stream operator type that is (FLATMAP, FUNCTION<LROW> -> OROWS)
+                //       or perhaps (XJOIN, LKEY, FUNCTION<LKEY> -> Stream<RROW>, FUNCTION<LROW, RROW>)
                 OperatorNode<PhysicalExprOperator> right = streamOperator.getArgument(1);
+                BytecodeExpression rightExpr = evaluateExpression(program, ctxExpr, right);
                 OperatorNode<FunctionOperator> leftKey = streamOperator.getArgument(2);
                 OperatorNode<FunctionOperator> rightKey = streamOperator.getArgument(3);
+                LambdaCallable leftKeyFunction = compileFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), leftKey);
+                LambdaCallable rightKeyFunction = compileFunctionLambda(program.getType(), ctxExpr.getType(), rightExpr.getType().getIterableAdapter().getValue(), rightKey);
                 OperatorNode<FunctionOperator> join = streamOperator.getArgument(4);
-                return new HashJoinSink(next, streamOperator.getOperator() == StreamOperator.OUTER_HASH_JOIN, right, leftKey, rightKey, join);
+                LambdaCallable joinFunction = compileBiFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), rightExpr.getType().getIterableAdapter().getValue(), join);
+                BytecodeExpression joined = adapter.hashJoin(streamInput,
+                        streamOperator.getOperator() == StreamOperator.OUTER_HASH_JOIN,
+                        rightExpr.getType().getIterableAdapter().toStream(rightExpr),
+                        leftKeyFunction.create(program, ctxExpr),
+                        rightKeyFunction.create(program, ctxExpr),
+                        joinFunction.create(program, ctxExpr),
+                        joinFunction.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, joined);
             }
             default:
                 throw new UnsupportedOperationException("Unexpected transform StreamOperator: " + streamOperator.toString());
@@ -1105,9 +1126,8 @@ public class PhysicalExprOperatorCompiler {
             TypeWidget cursorType = output.getType();
             IterateAdapter it = cursorType.getIterableAdapter();
             TypeWidget valueType = it.getValue();
-            TypeWidget comparatorType = compileComparator(program.getType(), ctxExpr.getType(), valueType, comparator);
-            BytecodeExpression comparatorInstance = scope.invoke(comparator.getLocation(),
-                    scope.constructor(comparatorType, program.getType(), ctxExpr.getType()), program, ctxExpr);
+            LambdaCallable comparatorType = compileComparator(program.getType(), ctxExpr.getType(), valueType, comparator);
+            BytecodeExpression comparatorInstance = comparatorType.create(program, ctxExpr);
             BytecodeExpression sorted = scope.invokeExact(comparator.getLocation(), "sort", ProgramInvocation.class, output.getType(),
                     program,
                     output,
@@ -1160,7 +1180,6 @@ public class PhysicalExprOperatorCompiler {
         private final OperatorNode<PhysicalExprOperator> right;
         private final OperatorNode<FunctionOperator> output;
         private BytecodeExpression rightExpr;
-        private IterateAdapter rightIterator;
         private IterateAdapter outputIterator;
         private GambitCreator.Invocable compiledOutput;
 
@@ -1173,7 +1192,7 @@ public class PhysicalExprOperatorCompiler {
         @Override
         public void prepare(GambitCreator.ScopeBuilder scope, BytecodeExpression program, BytecodeExpression context, TypeWidget itemType) {
             rightExpr = scope.local(evaluateExpression(program, context, right));
-            rightIterator = rightExpr.getType().getIterableAdapter();
+            IterateAdapter rightIterator = rightExpr.getType().getIterableAdapter();
             compiledOutput = compileFunction(program.getType(), context.getType(), ImmutableList.of(itemType, rightIterator.getValue()), output);
             outputIterator = compiledOutput.getReturnType().getIterableAdapter();
             super.prepare(scope, program, context, outputIterator.getValue());

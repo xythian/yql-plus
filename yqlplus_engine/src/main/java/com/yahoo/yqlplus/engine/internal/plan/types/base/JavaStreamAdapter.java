@@ -11,10 +11,11 @@ import com.yahoo.yqlplus.engine.internal.java.backends.java.StreamsSupport;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
 import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
-import org.objectweb.asm.Type;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 
 import java.util.Comparator;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -63,7 +64,7 @@ public class JavaStreamAdapter implements StreamAdapter {
     public BytecodeExpression streamInto(BytecodeExpression streamInput, BytecodeExpression targetExpression) {
         return new InvokeExpression(Stream.class,
                 Opcodes.INVOKEINTERFACE,
-                "forEach",
+                "forEachOrdered",
                 Type.getMethodDescriptor(Type.VOID_TYPE, Type.getType(Consumer.class)),
                 new ListTypeWidget(valueType),
                 streamInput,
@@ -128,22 +129,13 @@ public class JavaStreamAdapter implements StreamAdapter {
     @Override
     public BytecodeExpression skipNulls(BytecodeExpression streamInput) {
         if(valueType.isNullable()) {
-            return new InvokeExpression(Stream.class,
-                    Opcodes.INVOKEINTERFACE,
-                    "filter",
-                    Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Predicate.class)),
-                    new StreamTypeWidget(NotNullableTypeWidget.create(valueType)),
-                    streamInput,
-                    ImmutableList.of(
-                            new InvokeExpression(StreamsSupport.class,
-                                    Opcodes.INVOKESTATIC,
-                                    "skipNulls",
-                                    Type.getMethodDescriptor(Type.getType(Function.class)),
-                                    new FunctionTypeWidget(),
-                                    null,
-                                    ImmutableList.of())
-
-                    ));
+            return new InvokeExpression(StreamsSupport.class,
+                                Opcodes.INVOKESTATIC,
+                                "skipNulls",
+                                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Stream.class)),
+                                new StreamTypeWidget(NotNullableTypeWidget.create(valueType)),
+                                null,
+                            ImmutableList.of(streamInput));
         }
         return streamInput;
     }
@@ -197,6 +189,53 @@ public class JavaStreamAdapter implements StreamAdapter {
                 streamInput,
                 ImmutableList.of(
                         comparator
+                ));
+    }
+
+    @Override
+    public BytecodeExpression groupBy(BytecodeExpression streamInput, BytecodeExpression keyFunction, BytecodeExpression groupFunction, TypeWidget resultType) {
+        return new InvokeExpression(StreamsSupport.class,
+                Opcodes.INVOKESTATIC,
+                "groupBy",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Stream.class), Type.getType(Function.class), Type.getType(BiFunction.class)),
+                new StreamTypeWidget(resultType),
+                null,
+                ImmutableList.of(
+                        streamInput,
+                        keyFunction,
+                        groupFunction
+                ));
+    }
+
+    @Override
+    public BytecodeExpression cross(BytecodeExpression streamInput, BytecodeExpression rightIterable, BytecodeExpression crossFunction, TypeWidget resultType) {
+        return new InvokeExpression(StreamsSupport.class,
+                Opcodes.INVOKESTATIC,
+                "cross",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Stream.class), Type.getType(Iterable.class), Type.getType(BiFunction.class)),
+                new StreamTypeWidget(resultType),
+                null,
+                ImmutableList.of(
+                        streamInput,
+                        rightIterable,
+                        crossFunction
+                ));
+    }
+
+    @Override
+    public BytecodeExpression hashJoin(BytecodeExpression streamInput, boolean outer, BytecodeExpression rightStream, BytecodeExpression leftKeyFunction, BytecodeExpression rightKeyFunction, BytecodeExpression joinFunction, TypeWidget resultType) {
+        return new InvokeExpression(StreamsSupport.class,
+                Opcodes.INVOKESTATIC,
+                outer ? "outerHashJoin" : "hashJoin",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Stream.class), Type.getType(Stream.class), Type.getType(Function.class), Type.getType(Function.class), Type.getType(BiFunction.class)),
+                new StreamTypeWidget(resultType),
+                null,
+                ImmutableList.of(
+                        streamInput,
+                        rightStream,
+                        leftKeyFunction,
+                        rightKeyFunction,
+                        joinFunction
                 ));
     }
 }

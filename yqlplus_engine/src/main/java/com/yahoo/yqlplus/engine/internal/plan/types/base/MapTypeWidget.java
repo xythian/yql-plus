@@ -114,6 +114,12 @@ public class MapTypeWidget extends BaseTypeWidget {
         public BytecodeExpression streamFlattener() {
             return entryIterator.streamFlattener();
         }
+
+        @Override
+        public BytecodeExpression toStream(BytecodeExpression target) {
+            return entryIterator.toStream(target);
+
+        }
     }
 
     @Override

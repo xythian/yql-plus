@@ -29,4 +29,16 @@ public class DynamicIterateAdapter implements IterateAdapter {
     public BytecodeExpression first(BytecodeExpression target) {
         return new IterateFirstSequence(target, AnyTypeWidget.getInstance());
     }
+
+    @Override
+    public BytecodeExpression streamFlattener() {
+        throw new UnsupportedOperationException();
+
+    }
+
+    @Override
+    public BytecodeExpression toStream(BytecodeExpression target) {
+        throw new UnsupportedOperationException();
+
+    }
 }

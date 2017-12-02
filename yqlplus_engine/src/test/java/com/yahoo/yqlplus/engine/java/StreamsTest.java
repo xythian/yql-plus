@@ -3,14 +3,13 @@ package com.yahoo.yqlplus.engine.java;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.yahoo.yqlplus.api.Source;
+import com.yahoo.yqlplus.api.annotations.Key;
 import com.yahoo.yqlplus.api.annotations.Query;
 import com.yahoo.yqlplus.engine.api.Record;
 import com.yahoo.yqlplus.engine.internal.bytecode.CompilingTestBase;
 import org.testng.Assert;
 import org.testng.annotations.Test;
-import org.testng.collections.Lists;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -47,11 +46,26 @@ public class StreamsTest extends CompilingTestBase {
         }
     }
 
+    public static class KeyTestSource implements Source {
+        @Query
+        public Stream<TestRecord> lookup(@Key("id") List<String> ids) {
+            return ids.stream()
+                    .map(TestRecord::new);
+        }
+    }
+
     @Test
     public void requireSource() throws Exception {
         defineSource("test", TestSource.class);
-        List<Record> result = runQueryProgram("SELECT id FROM test WHERE id = '2'");
+        List<Record> result = runQueryProgram("SELECT id FROM test WHERE id = '1'");
         Assert.assertEquals(result.size(), 1);
+    }
+
+    @Test
+    public void requireQuerySource() throws Exception {
+        defineSource("test", KeyTestSource.class);
+        List<Record> result = runQueryProgram("SELECT id FROM test WHERE id IN ('1', '2', '3')");
+        Assert.assertEquals(result.size(), 3);
     }
 
     @Test
@@ -61,7 +75,7 @@ public class StreamsTest extends CompilingTestBase {
                 .parallel()
                 .flatMap(z -> ImmutableList.of(z, z).stream());
         List<String>  target = x.collect(Collectors.toList());
-        System.err.println(target);
+        //System.err.println(target);
     }
 
     @Test
@@ -72,7 +86,7 @@ public class StreamsTest extends CompilingTestBase {
                 .parallel()
                 .flatMap(z -> ImmutableList.of(z, z).stream());
         List<String>  target = x.collect(Collectors.toList());
-        System.err.println(target);
+        //System.err.println(target);
     }
 
 }
