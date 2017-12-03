@@ -48,11 +48,20 @@ public class StreamsSupport {
 
     public static <LROW, RROW, OROW> Stream<OROW> cross(Stream<LROW> left, Iterable<RROW> right, BiFunction<LROW,RROW,OROW> crossFunction) {
         return left.flatMap(lrow -> {
-            Stream.Builder<OROW> out = Stream.builder();
+            Stream.Builder<Object> out = Stream.builder();
             for(RROW rrow : right) {
-                out.add(crossFunction.apply(lrow, rrow));
+                OROW x = crossFunction.apply(lrow, rrow);
+                if(x instanceof Iterable) {
+                    for(Object v : (Iterable)x) {
+                        out.add(v);
+                    }
+                } else if(x instanceof Stream) {
+                    ((Stream) x).forEachOrdered(out);
+                } else {
+                    out.add(x);
+                }
             }
-            return out.build();
+            return (Stream<OROW>)out.build();
         });
     }
 

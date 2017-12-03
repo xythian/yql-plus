@@ -7,7 +7,6 @@
 package com.yahoo.yqlplus.engine.internal.bytecode.types.gambit;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -42,6 +41,7 @@ import org.objectweb.asm.Type;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 public class PhysicalExprOperatorCompiler {
     public static final MetricDimension EMPTY_DIMENSION = new MetricDimension();
@@ -514,7 +514,7 @@ public class PhysicalExprOperatorCompiler {
         builder.implement(Predicate.class);
         builder.addParameter("$program", programType);
         builder.addParameter("$context", contextType);
-        ObjectBuilder.MethodBuilder apply = builder.method("apply");
+        ObjectBuilder.MethodBuilder apply = builder.method("test");
         BytecodeExpression leftExpr = apply.addArgument("$item$", AnyTypeWidget.getInstance());
         apply.evaluateInto(argumentNames.get(0),
                 apply.cast(function.getLocation(), itemType, leftExpr));
@@ -738,7 +738,13 @@ public class PhysicalExprOperatorCompiler {
                 BytecodeExpression rightExpr = evaluateExpression(program, ctxExpr, right);
                 OperatorNode<FunctionOperator> output = streamOperator.getArgument(2);
                 LambdaCallable outputFunction = compileBiFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), rightExpr.getType().getIterableAdapter().getValue(), output);
-                BytecodeExpression crossed = adapter.cross(streamInput, rightExpr, outputFunction.create(program, ctxExpr), outputFunction.resultType);
+                TypeWidget outputType = outputFunction.resultType;
+                if (outputType.isIterable()) {
+                    outputType = outputType.getIterableAdapter().getValue();
+                } else if(outputType.isStream()) {
+                    outputType = outputType.getStreamAdapter().getValue();
+                }
+                BytecodeExpression crossed = adapter.cross(streamInput, rightExpr, outputFunction.create(program, ctxExpr), outputType);
                 return compileStreamExpression(scope, program, ctxExpr, nextStream, crossed);
             }
             case PIPE: {

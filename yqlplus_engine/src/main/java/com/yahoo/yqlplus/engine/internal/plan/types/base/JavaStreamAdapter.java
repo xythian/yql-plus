@@ -9,6 +9,7 @@ package com.yahoo.yqlplus.engine.internal.plan.types.base;
 import com.google.common.collect.ImmutableList;
 import com.yahoo.yqlplus.engine.internal.java.backends.java.StreamsSupport;
 import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
 import org.objectweb.asm.Opcodes;
@@ -79,14 +80,15 @@ public class JavaStreamAdapter implements StreamAdapter {
         if (!valueType.isIterable()) {
             throw new UnsupportedOperationException("Cannot flatten a Stream of non-iterable values");
         }
+        IterateAdapter adapter = valueType.getIterableAdapter();
         return new InvokeExpression(Stream.class,
                 Opcodes.INVOKEINTERFACE,
                 "flatMap",
                 Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Function.class)),
-                new StreamTypeWidget(valueType),
+                new StreamTypeWidget(adapter.getValue()),
                 streamInput,
                 ImmutableList.of(
-                        valueType.getIterableAdapter().streamFlattener()
+                        adapter.streamFlattener()
                 ));
     }
 

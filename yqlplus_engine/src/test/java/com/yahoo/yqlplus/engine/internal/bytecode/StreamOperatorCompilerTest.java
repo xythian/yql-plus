@@ -16,7 +16,6 @@ import com.yahoo.yqlplus.engine.internal.plan.streams.StreamOperator;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
 import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
 import com.yahoo.yqlplus.language.operator.OperatorNode;
-
 import org.objectweb.asm.Opcodes;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -149,7 +148,7 @@ public class StreamOperatorCompilerTest extends CompilingTestBase {
                 OperatorNode.create(FunctionOperator.FUNCTION, ImmutableList.of("$left", "$right"),
                         OperatorNode.create(PhysicalExprOperator.SINGLETON,
                                 OperatorNode.create(PhysicalExprOperator.NEW, scope.adapt(MyRecord.class, false), ImmutableList.of(OperatorNode.create(PhysicalExprOperator.LOCAL, "$right"), OperatorNode.create(PhysicalExprOperator.LOCAL, "$left")))))));
-        Assert.assertEquals(output, invoker.call());
+        Assert.assertEquals(invoker.call(), output);
     }
 
     public static class Photo {
