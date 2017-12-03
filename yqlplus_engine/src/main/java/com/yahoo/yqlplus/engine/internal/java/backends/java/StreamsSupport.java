@@ -24,7 +24,9 @@ public class StreamsSupport {
     }
 
     public static <ROW> Stream<ROW> toStream(Iterable<ROW> rows) {
-        if(rows instanceof Collection) {
+        if (rows == null) {
+            return Stream.empty();
+        } else if(rows instanceof Collection) {
             return ((Collection<ROW>) rows).stream();
         } else {
             return StreamSupport.stream(rows.spliterator(), false);

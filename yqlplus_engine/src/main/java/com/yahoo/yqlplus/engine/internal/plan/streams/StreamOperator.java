@@ -37,7 +37,13 @@ public enum StreamOperator implements Operator {
     // HASH_JOIN(right_sequence, (left) -> key, (right) -> key, (left, right) -> row)
     HASH_JOIN(StreamOperator.class, PhysicalExprOperator.class, FunctionOperator.class, FunctionOperator.class, FunctionOperator.class),
     // OUTER_HASH_JOIN(right_sequence, (left) -> key, (right) -> key, (left, right_or_null) -> row)
-    OUTER_HASH_JOIN(StreamOperator.class, PhysicalExprOperator.class, FunctionOperator.class, FunctionOperator.class, FunctionOperator.class);
+    OUTER_HASH_JOIN(StreamOperator.class, PhysicalExprOperator.class, FunctionOperator.class, FunctionOperator.class, FunctionOperator.class),
+    // PIPE(stream, function(stream) -> stream)
+    PIPE(StreamOperator.class, FunctionOperator.class),
+    // FLATTEN_TRANSFORM(stream, (row) -> *rows)
+    FLATTEN_TRANSFORM(StreamOperator.class, FunctionOperator.class),
+    // FLATTEN_SCATTER(stream, (row) -> *rows)
+    FLATTEN_SCATTER(StreamOperator.class, FunctionOperator.class);
 
     public static OperatorNode<StreamOperator> create(Location loc, StreamOperator operator, Object... arguments) {
         return OperatorNode.create(loc, operator, arguments);

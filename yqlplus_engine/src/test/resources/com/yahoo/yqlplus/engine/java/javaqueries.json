@@ -113,11 +113,11 @@
             }
         },
         {
-            "input": "SELECT value FROM {{sourcespec}} WHERE {{idfield}} IN ('100', '101', '102') LIMIT 1 OFFSET {{offset1}} OUTPUT AS f1;",
+            "input": "SELECT value FROM {{sourcespec}} WHERE {{idfield}} IN ('100', '101', '102') ORDER BY {{idField}} LIMIT 1 OFFSET {{offset1}} OUTPUT AS f1;",
             "output": "{\"f1\": [{ \"value\": \"10{{offset1}}\" }]}"
         },
         {
-            "input": "SELECT value FROM {{sourcespec}} WHERE {{idfield}} IN ('100', '101', '102') LIMIT 1 OUTPUT AS f1;",
+            "input": "SELECT value FROM {{sourcespec}} WHERE {{idfield}} IN ('100', '101', '102') ORDER BY {{idField}} LIMIT 1 OUTPUT AS f1;",
             "output": {
                 "f1": [
                     {
@@ -127,7 +127,7 @@
             }
         },
         {
-            "input": "SELECT value FROM {{sourcespec}} WHERE {{idfield}} IN ('100', '101', '102') OFFSET 2 OUTPUT AS f1;",
+            "input": "SELECT value FROM {{sourcespec}} WHERE {{idfield}} IN ('100', '101', '102') ORDER BY {{idField}} OFFSET 2 OUTPUT AS f1;",
             "output": {
                 "f1": [
                     {

@@ -67,10 +67,7 @@ public class SequenceBuiltinsModule implements ModuleType {
             if (arguments.size() != 0) {
                 throw new ProgramCompileException(location, "distinct(): argument count mismatch");
             }
-            input.add(location, StreamOperator.GROUPBY,
-                    OperatorNode.create(FunctionOperator.FUNCTION, ImmutableList.of("$row"), OperatorNode.create(PhysicalExprOperator.LOCAL, "$row")),
-                    OperatorNode.create(FunctionOperator.FUNCTION, ImmutableList.of("$key", "$rows"), OperatorNode.create(PhysicalExprOperator.LOCAL, "$key"))
-            );
+            input.add(location, StreamOperator.DISTINCT);
             return input;
         }
         throw new ProgramCompileException(location, "Unknown sequences function '%s'", name);

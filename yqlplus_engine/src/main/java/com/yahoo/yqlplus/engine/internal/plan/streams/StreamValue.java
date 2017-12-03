@@ -64,6 +64,7 @@ public abstract class StreamValue {
                     return OperatorNode.createAs(location, ImmutableMap.<String, Object>of(), operator, args);
                 }
             }
+            case CROSS:
             case DISTINCT:
             case FLATTEN:
             case FILTER:
@@ -75,6 +76,9 @@ public abstract class StreamValue {
             case OUTER_HASH_JOIN:
             case TRANSFORM:
             case SCATTER:
+            case PIPE:
+            case FLATTEN_TRANSFORM:
+            case FLATTEN_SCATTER:
             case GROUPBY: {
                 Object[] oldArguments = target.getArguments();
                 Object[] newArguments = new Object[oldArguments.length];

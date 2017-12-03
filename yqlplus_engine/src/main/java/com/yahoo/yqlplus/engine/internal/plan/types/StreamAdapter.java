@@ -21,8 +21,10 @@ public interface StreamAdapter {
     BytecodeExpression filter(BytecodeExpression streamInput, BytecodeExpression predicate);
 
     BytecodeExpression transform(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget valueType);
+    BytecodeExpression flatTransform(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget valueType);
 
     BytecodeExpression scatter(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget valueType);
+    BytecodeExpression flatScatter(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget valueType);
 
     BytecodeExpression sorted(BytecodeExpression streamInput, BytecodeExpression comparator);
 

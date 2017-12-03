@@ -19,6 +19,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.BaseStream;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -66,7 +67,7 @@ public class JavaStreamAdapter implements StreamAdapter {
                 Opcodes.INVOKEINTERFACE,
                 "forEachOrdered",
                 Type.getMethodDescriptor(Type.VOID_TYPE, Type.getType(Consumer.class)),
-                new ListTypeWidget(valueType),
+                BaseTypeAdapter.VOID,
                 streamInput,
                 ImmutableList.of(
                         targetExpression
@@ -120,7 +121,7 @@ public class JavaStreamAdapter implements StreamAdapter {
         return new InvokeExpression(Stream.class,
                 Opcodes.INVOKEINTERFACE,
                 "distinct",
-                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(long.class)),
+                Type.getMethodDescriptor(Type.getType(Stream.class)),
                 new StreamTypeWidget(valueType),
                 streamInput,
                 ImmutableList.of());
@@ -167,7 +168,37 @@ public class JavaStreamAdapter implements StreamAdapter {
     }
 
     @Override
+    public BytecodeExpression flatTransform(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget valueType) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "flatMap",
+                Type.getMethodDescriptor(Type.getType(Stream.class), Type.getType(Function.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                        function
+                ));
+    }
+
+    public BytecodeExpression parallel(BytecodeExpression streamInput) {
+        return new InvokeExpression(Stream.class,
+                Opcodes.INVOKEINTERFACE,
+                "parallel",
+                Type.getMethodDescriptor(Type.getType(BaseStream.class)),
+                new StreamTypeWidget(valueType),
+                streamInput,
+                ImmutableList.of(
+                ));
+    }
+
+
+    @Override
     public BytecodeExpression scatter(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget resultValueType) {
+        return transform(parallel(streamInput), function, resultValueType);
+    }
+
+    @Override
+    public BytecodeExpression flatScatter(BytecodeExpression streamInput, BytecodeExpression function, TypeWidget resultValueType) {
         BytecodeExpression parallel = new InvokeExpression(Stream.class,
                 Opcodes.INVOKEINTERFACE,
                 "parallel",
@@ -176,7 +207,7 @@ public class JavaStreamAdapter implements StreamAdapter {
                 streamInput,
                 ImmutableList.of(
                 ));
-        return transform(parallel, function, resultValueType);
+        return flatTransform(parallel, function, resultValueType);
     }
 
     @Override

@@ -552,7 +552,7 @@ public class PhysicalExprOperatorCompiler {
         BytecodeExpression arg1Expr = apply.addArgument("$arg1", AnyTypeWidget.getInstance());
         BytecodeExpression arg2Expr = apply.addArgument("$arg2", AnyTypeWidget.getInstance());
         apply.evaluateInto(argumentNames.get(0),
-                apply.cast(function.getLocation(), arg1Type, arg2Expr));
+                apply.cast(function.getLocation(), arg1Type, arg1Expr));
         apply.evaluateInto(argumentNames.get(1),
                 apply.cast(function.getLocation(), arg2Type, arg2Expr));
         PhysicalExprOperatorCompiler compiler = new PhysicalExprOperatorCompiler(apply);
@@ -635,11 +635,14 @@ public class PhysicalExprOperatorCompiler {
         final BytecodeExpression timeout = getTimeout(ctxExpr, input.getLocation());
         streamInput = scope.resolve(input.getLocation(), timeout, streamInput);
         if(streamInput.getType().isIterable()) {
-            GambitCreator.IterateBuilder iterateBuilder = scope.iterate(streamInput);
-            StreamSink streamPipeline = new SkipNullsSink(compileStream(program, ctxExpr, stream));
-            streamPipeline.prepare(scope, program, ctxExpr, iterateBuilder.getItem().getType());
-            streamPipeline.item(iterateBuilder, iterateBuilder.getItem());
-            return streamPipeline.end(scope, iterateBuilder);
+            // here's a test
+//            GambitCreator.IterateBuilder iterateBuilder = scope.iterate(streamInput);
+//            StreamSink streamPipeline = new SkipNullsSink(compileStream(program, ctxExpr, stream));
+//            streamPipeline.prepare(scope, program, ctxExpr, iterateBuilder.getItem().getType());
+//            streamPipeline.item(iterateBuilder, iterateBuilder.getItem());
+//            return streamPipeline.end(scope, iterateBuilder);
+            streamInput = streamInput.getType().getIterableAdapter().toStream(streamInput);
+            return compileStreamExpression(scope, program, ctxExpr, stream, streamInput.getType().getStreamAdapter().skipNulls(streamInput));
         } else if (streamInput.getType().isStream()) {
             return compileStreamExpression(scope, program, ctxExpr, stream, streamInput.getType().getStreamAdapter().skipNulls(streamInput));
          } else {
@@ -649,6 +652,11 @@ public class PhysicalExprOperatorCompiler {
     }
 
     private BytecodeExpression compileStreamExpression(GambitCreator.ScopeBuilder scope, BytecodeExpression program, BytecodeExpression ctxExpr, OperatorNode<StreamOperator> streamOperator, BytecodeExpression streamInput) {
+        if(!streamInput.getType().isStream()) {
+            if(streamInput.getType().isIterable()) {
+                streamInput = streamInput.getType().getIterableAdapter().toStream(streamInput);
+            }
+        }
         StreamAdapter adapter = streamInput.getType().getStreamAdapter();
         if (streamOperator.getOperator() == StreamOperator.SINK) {
             OperatorNode<SinkOperator> sink = streamOperator.getArgument(0);
@@ -732,6 +740,30 @@ public class PhysicalExprOperatorCompiler {
                 LambdaCallable outputFunction = compileBiFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), rightExpr.getType().getIterableAdapter().getValue(), output);
                 BytecodeExpression crossed = adapter.cross(streamInput, rightExpr, outputFunction.create(program, ctxExpr), outputFunction.resultType);
                 return compileStreamExpression(scope, program, ctxExpr, nextStream, crossed);
+            }
+            case PIPE: {
+                // PIPE(stream, function(stream) -> stream)
+                // PIPE(StreamOperator.class, FunctionOperator.class),
+                OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
+                GambitCreator.Invocable functionType = compileFunction(program.getType(), ctxExpr.getType(), ImmutableList.of(streamInput.getType()), function);
+                BytecodeExpression resultStream = functionType.invoke(streamOperator.getLocation(), program, ctxExpr, streamInput);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, resultStream);
+            }
+            case FLATTEN_TRANSFORM: {
+                // FLATTEN_TRANSFORM(stream, (row) -> *rows)
+                // FLATTEN_TRANSFORM(StreamOperator.class, FunctionOperator.class),
+                OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
+                LambdaCallable functionType = compileFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), function);
+                BytecodeExpression filtered = adapter.flatTransform(streamInput, functionType.create(program, ctxExpr), functionType.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, filtered);
+            }
+            case FLATTEN_SCATTER: {
+                // FLATTEN_SCATTER(stream, (row) -> *rows)
+                // FLATTEN_SCATTER(StreamOperator.class, FunctionOperator.class),
+                OperatorNode<FunctionOperator> function = streamOperator.getArgument(1);
+                LambdaCallable functionType = compileFunctionLambda(program.getType(), ctxExpr.getType(), adapter.getValue(), function);
+                BytecodeExpression filtered = adapter.flatScatter(streamInput, functionType.create(program, ctxExpr), functionType.resultType);
+                return compileStreamExpression(scope, program, ctxExpr, nextStream, filtered);
             }
             case OUTER_HASH_JOIN:
             case HASH_JOIN: {
