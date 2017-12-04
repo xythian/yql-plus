@@ -30,15 +30,34 @@ import com.yahoo.yqlplus.engine.internal.plan.ast.PhysicalExprOperator;
 import com.yahoo.yqlplus.engine.internal.plan.ast.PhysicalProjectOperator;
 import com.yahoo.yqlplus.engine.internal.plan.streams.SinkOperator;
 import com.yahoo.yqlplus.engine.internal.plan.streams.StreamOperator;
-import com.yahoo.yqlplus.engine.internal.plan.types.*;
-import com.yahoo.yqlplus.engine.internal.plan.types.base.*;
+import com.yahoo.yqlplus.engine.internal.plan.types.AssignableValue;
+import com.yahoo.yqlplus.engine.internal.plan.types.BytecodeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.IterateAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.StreamAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.AnyTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeAdapter;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.BaseTypeExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.BytecodeCastExpression;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.ListTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.MapTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.NotNullableTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.NullableTypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.types.base.PropertyAdapter;
 import com.yahoo.yqlplus.language.operator.OperatorNode;
 import com.yahoo.yqlplus.language.parser.Location;
 import com.yahoo.yqlplus.language.parser.ProgramCompileException;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -642,9 +661,9 @@ public class PhysicalExprOperatorCompiler {
 //            streamPipeline.item(iterateBuilder, iterateBuilder.getItem());
 //            return streamPipeline.end(scope, iterateBuilder);
             streamInput = streamInput.getType().getIterableAdapter().toStream(streamInput);
-            return compileStreamExpression(scope, program, ctxExpr, stream, streamInput.getType().getStreamAdapter().skipNulls(streamInput));
+            return compileStreamExpression(scope, program, ctxExpr, stream, streamInput);
         } else if (streamInput.getType().isStream()) {
-            return compileStreamExpression(scope, program, ctxExpr, stream, streamInput.getType().getStreamAdapter().skipNulls(streamInput));
+            return compileStreamExpression(scope, program, ctxExpr, stream, streamInput);
          } else {
             throw new UnsupportedOperationException("streamExecute argument must be iterable; type is " + streamInput.getType());
 

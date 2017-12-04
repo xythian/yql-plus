@@ -11,6 +11,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.yahoo.yqlplus.engine.api.PropertyNotFoundException;
 import com.yahoo.yqlplus.engine.internal.bytecode.ASMClassSource;
+import com.yahoo.yqlplus.engine.internal.bytecode.exprs.NullExpr;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.ArrayTypeWidget;
 import com.yahoo.yqlplus.engine.internal.compiler.BooleanCompareExpression;
 import com.yahoo.yqlplus.engine.internal.compiler.BytecodeArithmeticExpression;
@@ -655,7 +656,7 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
         try {
             return guarded(target,
                     (e) -> e.getType().getPropertyAdapter().property(e, propertyName),
-                    (nullE) -> nullE);
+                    (availType) -> new NullExpr(availType.boxed()));
         } catch (PropertyNotFoundException e) {
             throw new ProgramCompileException(loc, e.getMessage());
         }
@@ -665,11 +666,12 @@ public abstract class ExpressionHandler extends TypesHandler implements ScopedBu
     public BytecodeExpression indexValue(Location loc, BytecodeExpression target, BytecodeExpression index) {
         return guarded(target,
                 (e) -> e.getType().getIndexAdapter().index(e, index),
-                (nullE) -> nullE);
+                (availType) -> new NullExpr(availType.boxed()));
     }
 
+
     @Override
-    public BytecodeExpression guarded(BytecodeExpression input, ExpressionTemplate available, ExpressionTemplate missing) {
+    public BytecodeExpression guarded(BytecodeExpression input, ExpressionTemplate available, ExpressionTypeTemplate missing) {
         return input.getType().getOptionalAdapter().resolve(this, input, available, missing);
     }
 

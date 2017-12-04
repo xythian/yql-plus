@@ -8,6 +8,7 @@ package com.yahoo.yqlplus.engine.internal.plan.types.base;
 
 import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.NativeEncoding;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ExpressionTypeTemplate;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ResultAdapter;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ScopedBuilder;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
@@ -197,7 +198,7 @@ public final class NotNullableTypeWidget implements TypeWidget {
             }
 
             @Override
-            public BytecodeExpression resolve(ScopedBuilder scope, BytecodeExpression target, ExpressionTemplate available, ExpressionTemplate missing) {
+            public BytecodeExpression resolve(ScopedBuilder scope, BytecodeExpression target, ExpressionTemplate available, ExpressionTypeTemplate missing) {
                 return available.compute(target);
             }
 

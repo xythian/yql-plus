@@ -10,8 +10,8 @@ import com.google.common.base.Preconditions;
 import com.yahoo.yqlplus.api.types.YQLBaseType;
 import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.api.NativeEncoding;
-import com.yahoo.yqlplus.engine.internal.bytecode.exprs.NullExpr;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ConstructInvocation;
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ExpressionTypeTemplate;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.GambitCreator;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ResultAdapter;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ScopedBuilder;
@@ -283,12 +283,12 @@ public abstract class BaseTypeWidget implements TypeWidget {
             }
 
             @Override
-            public BytecodeExpression resolve(ScopedBuilder parent, BytecodeExpression target, ExpressionTemplate available, ExpressionTemplate missing) {
+            public BytecodeExpression resolve(ScopedBuilder parent, BytecodeExpression target, ExpressionTemplate available, ExpressionTypeTemplate missing) {
                 if(isNullable()) {
                     GambitCreator.ScopeBuilder scope = parent.scope();
                     BytecodeExpression expr = scope.evaluateInto(target);
                     BytecodeExpression avail = available.compute(new NullCheckedEvaluatedExpression(expr));
-                    BytecodeExpression unavail = missing.compute(new NullExpr(expr.getType()));
+                    BytecodeExpression unavail = missing.compute(avail.getType());
                     TypeWidget output = scope.unify(avail.getType(), unavail.getType());
                     return scope.complete(new BaseTypeExpression(output) {
                         @Override

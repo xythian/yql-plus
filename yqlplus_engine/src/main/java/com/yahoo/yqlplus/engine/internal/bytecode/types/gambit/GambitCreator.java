@@ -130,7 +130,7 @@ public interface GambitCreator extends GambitTypes {
 
     BytecodeExpression coalesce(Location loc, List<BytecodeExpression> inputs);
 
-    BytecodeExpression guarded(BytecodeExpression input, ExpressionTemplate available, ExpressionTemplate missing);
+    BytecodeExpression guarded(BytecodeExpression input, ExpressionTemplate available, ExpressionTypeTemplate missing);
 
     BytecodeExpression list(TypeWidget elementType);
 

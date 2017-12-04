@@ -6,13 +6,14 @@
 
 package com.yahoo.yqlplus.engine.internal.plan.types;
 
+import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ExpressionTypeTemplate;
 import com.yahoo.yqlplus.engine.internal.bytecode.types.gambit.ScopedBuilder;
 import com.yahoo.yqlplus.engine.internal.compiler.CodeEmitter;
 
 public interface OptionalAdapter {
     TypeWidget getResultType();
 
-    BytecodeExpression resolve(ScopedBuilder scope, BytecodeExpression target, ExpressionTemplate available,  ExpressionTemplate missing);
+    BytecodeExpression resolve(ScopedBuilder scope, BytecodeExpression target, ExpressionTemplate available,  ExpressionTypeTemplate missing);
     void generate(CodeEmitter code, BytecodeExpression target, ValueSequence available, ValueSequence missing);
 }
 

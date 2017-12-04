@@ -1,12 +1,13 @@
 package com.yahoo.yqlplus.engine.internal.java.backends.java;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -65,17 +66,40 @@ public class StreamsSupport {
         });
     }
 
-    public static <KEY,ROW> Map<KEY, List<ROW>> computeJoinHash(Stream<ROW> input, Function<ROW,KEY> rowkeyFunction) {
-        return input.collect(Collectors.groupingByConcurrent(rowkeyFunction));
+    private static <KEY,ROW> Function<KEY, List<ROW>> computeJoinHash(boolean outer, Stream<ROW> input, Function<ROW,KEY> rowkeyFunction) {
+        Map<KEY, List<ROW>>  joinHash = input.collect(Collectors.groupingByConcurrent((row) -> {
+            KEY key = rowkeyFunction.apply((ROW)row);
+            if (key == null) {
+                return (KEY)Optional.empty();
+            }
+            return key;
+        }));
+        if (outer) {
+            List<ROW> emptyRows = new ArrayList<>();
+            emptyRows.add(null);
+            return (key) -> {
+                if (key == null) {
+                    key = (KEY)Optional.empty();
+                }
+                return joinHash.getOrDefault(key, emptyRows);
+            };
+        } else {
+            return (key) -> {
+                if (key == null) {
+                    key = (KEY)Optional.empty();
+                }
+                return joinHash.getOrDefault(key, ImmutableList.of());
+            };
+        }
     }
 
     public static <KEY, LROW, RROW, OROW> Stream<OROW> hashJoin(Stream<LROW> left, Stream<RROW> right, Function<LROW,KEY> leftKey, Function<RROW,KEY> rightKey, BiFunction<LROW,RROW,OROW> joinFunction) {
-        final Map<KEY,List<RROW>> joinMap = computeJoinHash(right, rightKey);
+        final Function<KEY,List<RROW>> rightFunction = computeJoinHash(false, right, rightKey);
         return left.flatMap(lrow -> {
             Stream.Builder<OROW> out = Stream.builder();
             KEY key = leftKey.apply(lrow);
             if (key != null) {
-                for(RROW rrow : joinMap.getOrDefault(key, ImmutableList.of())) {
+                for(RROW rrow : rightFunction.apply(key)) {
                     out.add(joinFunction.apply(lrow, rrow));
                 }
             }
@@ -84,12 +108,10 @@ public class StreamsSupport {
     }
 
     public static <KEY, LROW, RROW, OROW> Stream<OROW> outerHashJoin(Stream<LROW> left, Stream<RROW> right, Function<LROW,KEY> leftKey, Function<RROW,KEY> rightKey, BiFunction<LROW,RROW,OROW> joinFunction) {
-        final Map<KEY,List<RROW>> joinMap = computeJoinHash(right, rightKey);
+        final Function<KEY,List<RROW>> rightFunction = computeJoinHash(true, right, rightKey);
         return left.flatMap(lrow -> {
             Stream.Builder<OROW> out = Stream.builder();
-            List<RROW> emptyJoin = Lists.newArrayList();
-            emptyJoin.add(null);
-            for(RROW rrow : joinMap.getOrDefault(leftKey.apply(lrow), emptyJoin)) {
+            for(RROW rrow : rightFunction.apply(leftKey.apply(lrow))) {
                 out.add(joinFunction.apply(lrow, rrow));
             }
             return out.build();
