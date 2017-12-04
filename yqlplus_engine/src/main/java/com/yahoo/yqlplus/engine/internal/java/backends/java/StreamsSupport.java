@@ -73,8 +73,11 @@ public class StreamsSupport {
         final Map<KEY,List<RROW>> joinMap = computeJoinHash(right, rightKey);
         return left.flatMap(lrow -> {
             Stream.Builder<OROW> out = Stream.builder();
-            for(RROW rrow : joinMap.getOrDefault(leftKey.apply(lrow), ImmutableList.of())) {
-                out.add(joinFunction.apply(lrow, rrow));
+            KEY key = leftKey.apply(lrow);
+            if (key != null) {
+                for(RROW rrow : joinMap.getOrDefault(key, ImmutableList.of())) {
+                    out.add(joinFunction.apply(lrow, rrow));
+                }
             }
             return out.build();
         });
