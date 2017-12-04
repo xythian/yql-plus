@@ -6,19 +6,12 @@
 
 package com.yahoo.yqlplus.engine.internal.java.backends.java;
 
-import com.google.common.collect.Lists;
-
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
-import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class RecordAccumulator<OUTPUT> implements Consumer<OUTPUT> {
     private final ConcurrentLinkedQueue<Object> rows = new ConcurrentLinkedQueue<>();
@@ -26,14 +19,14 @@ public class RecordAccumulator<OUTPUT> implements Consumer<OUTPUT> {
 
     public List complete() {
         if (done.compareAndSet(false, true)) {
-            return finish(Lists.newArrayList(rows));
+            return finish((Stream<OUTPUT>) rows.stream());
         } else {
             throw new IllegalStateException();
         }
     }
 
-    protected List<OUTPUT> finish(List candidate) {
-        return candidate;
+    protected List<OUTPUT> finish(Stream<OUTPUT> candidate) {
+        return candidate.collect(Collectors.toList());
     }
 
     @Override
