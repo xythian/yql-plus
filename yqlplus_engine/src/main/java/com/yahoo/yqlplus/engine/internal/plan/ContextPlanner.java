@@ -99,52 +99,65 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
         return program.pipe(source.getLocation(), this, execute(input), path, args);
     }
 
-    StreamValue executeJoin(OperatorNode<SequenceOperator> join, OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression, OperatorNode<SequenceOperator> query) {
-        SequenceOperator operator = join.getOperator();
-        ReadFieldAliasAnnotate.RowType leftRowType = ReadFieldAliasAnnotate.RowType.getLeftType(join);
-        ReadFieldAliasAnnotate.RowType rightRowType = ReadFieldAliasAnnotate.RowType.getRightType(join);
-
-        StreamValue rightSide = executeJoinRightQuery(leftSide, joinExpression, query);
+    StreamValue executeJoin(OperatorNode<SequenceOperator> join, StreamValue leftSide, OperatorNode<ExpressionOperator> joinExpression, OperatorNode<SequenceOperator> query) {
+        boolean outer = join.getOperator() == SequenceOperator.LEFT_JOIN;
 
         List<OperatorNode<PhysicalExprOperator>> leftKey = Lists.newArrayList();
-        List<OperatorNode<PhysicalExprOperator>> rightKey = Lists.newArrayList();
+        List<String> rightKey = Lists.newArrayList();
         DynamicExpressionEvaluator eval = new DynamicExpressionEvaluator(this, OperatorNode.create(PhysicalExprOperator.LOCAL, "$row"));
         List<JoinExpression> joinExpressions =  JoinExpression.parse(joinExpression);
         for(JoinExpression expr : joinExpressions) {
             leftKey.add(eval.apply(expr.left));
-            rightKey.add(eval.apply(expr.right));
+            rightKey.add(expr.getRightField());
         }
 
         ExprScope function = new ExprScope();
         function.addArgument("$row");
 
         OperatorNode<FunctionOperator> leftKeyFunction =
-                function.createFunction(leftKey.size() == 1 ? leftKey.get(0) : OperatorNode.create(PhysicalExprOperator.ARRAY, leftKey));
-
-        OperatorNode<FunctionOperator> rightKeyFunction =
-                function.createFunction(rightKey.size() == 1 ? rightKey.get(0) : OperatorNode.create(PhysicalExprOperator.ARRAY, rightKey));
+                function.createFunction(OperatorNode.create(PhysicalExprOperator.RECORD,
+                        rightKey,
+                        leftKey));
 
         ExprScope joinOutputScope = new ExprScope();
         joinOutputScope.addArgument("$left");
         joinOutputScope.addArgument("$right");
-
-
         List<String> fieldNames = Lists.newArrayList();
         List<OperatorNode<PhysicalExprOperator>> fieldValues = Lists.newArrayList();
+
+        ReadFieldAliasAnnotate.RowType leftRowType = ReadFieldAliasAnnotate.RowType.getLeftType(join);
+        ReadFieldAliasAnnotate.RowType rightRowType = ReadFieldAliasAnnotate.RowType.getRightType(join);
         mergeFields(leftRowType, fieldNames, fieldValues, OperatorNode.create(PhysicalExprOperator.LOCAL, "$left"));
         mergeFields(rightRowType, fieldNames, fieldValues, OperatorNode.create(PhysicalExprOperator.LOCAL, "$right"));
 
         OperatorNode<FunctionOperator> outputFunction =
                 joinOutputScope.createFunction(OperatorNode.create(PhysicalExprOperator.RECORD, fieldNames, fieldValues));
 
-        StreamValue leftSideJoin = StreamValue.iterate(this, leftSide);
-        leftSideJoin.add(Location.NONE,
-                operator == SequenceOperator.LEFT_JOIN ? StreamOperator.OUTER_HASH_JOIN : StreamOperator.HASH_JOIN,
-                rightSide.materializeValue(),
-                leftKeyFunction,
+        KeyJoinDescriptor keyedJoin = new KeyJoinDescriptor(outer, rightKey, leftKeyFunction, outputFunction);
+        return executeJoinRightQuery(leftSide, keyedJoin, query);
+    }
+
+    public StreamValue executeHashJoin(StreamValue leftSide, KeyJoinDescriptor joinDescriptor, OperatorNode<PhysicalExprOperator> rightSide) {
+        // [OUTER_]HASH_JOIN(right_sequence, (left) -> key, (right) -> key, (left, right) -> row)
+        ExprScope function = new ExprScope();
+        function.addArgument("$row");
+        List<OperatorNode<PhysicalExprOperator>> rightFields = Lists.newArrayList();
+        OperatorNode<PhysicalExprOperator> rowRef = OperatorNode.create(PhysicalExprOperator.LOCAL, "$row");
+        for(String keyColumn : joinDescriptor.getKeyColumns()) {
+            rightFields.add(OperatorNode.create(PhysicalExprOperator.PROPREF, rowRef, keyColumn));
+        }
+        OperatorNode<FunctionOperator> rightKeyFunction =
+                function.createFunction(OperatorNode.create(PhysicalExprOperator.RECORD,
+                        joinDescriptor.getKeyColumns(),
+                        rightFields));
+        leftSide.add(Location.NONE,
+                joinDescriptor.isOuter() ? StreamOperator.OUTER_HASH_JOIN : StreamOperator.HASH_JOIN,
+                rightSide,
+                joinDescriptor.getExtractKey(),
                 rightKeyFunction,
-                outputFunction);
-        return leftSideJoin;
+                joinDescriptor.getCombineOutput());
+        return leftSide;
+
     }
 
     private void mergeFields(ReadFieldAliasAnnotate.RowType rowType, List<String> fieldNames, List<OperatorNode<PhysicalExprOperator>> fieldValues, OperatorNode<PhysicalExprOperator> row) {
@@ -159,7 +172,7 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
 
     }
 
-    private StreamValue executeJoinRightQuery(OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression, OperatorNode<SequenceOperator> query) {
+    private StreamValue executeJoinRightQuery(StreamValue leftSide, KeyJoinDescriptor joinDescriptor, OperatorNode<SequenceOperator> query) {
         OperatorNode<SequenceOperator> source = chainSource(query);
         switch (source.getOperator()) {
             case JOIN:
@@ -169,14 +182,18 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
             case EVALUATE:
             case EMPTY:
             case FALLBACK:
-                return executeLocalJoin(leftSide, joinExpression, query);
+                return new LocalJoiningChain(this, query.getLocation(), leftSide, joinDescriptor).execute(query);
             case SCAN:
                 program.addStatement(CompiledProgram.ProgramStatement.SELECT);
-                return executeReadJoin(leftSide, joinExpression, query, source);
-            case INSERT:
+                return executeSourceJoin(leftSide, joinDescriptor, query, source);
             case DELETE:
-            case DELETE_ALL:
+                program.addStatement(CompiledProgram.ProgramStatement.DELETE);
+                return executeSourceJoin(leftSide, joinDescriptor, query, source);
             case UPDATE:
+                program.addStatement(CompiledProgram.ProgramStatement.UPDATE);
+                return executeSourceJoin(leftSide, joinDescriptor, query, source);
+            case INSERT:
+            case DELETE_ALL:
             case UPDATE_ALL:
                 throw new ProgramCompileException(source.getLocation(), "%s may not be used as the right side of a JOIN", source.getOperator());
             case NEXT:
@@ -230,7 +247,7 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
         return type.plan(this, top, source);
     }
 
-    private StreamValue executeReadJoin(OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression, OperatorNode<SequenceOperator> top, OperatorNode<SequenceOperator> source) {
+    private StreamValue executeSourceJoin(StreamValue leftSide, KeyJoinDescriptor joinExpression, OperatorNode<SequenceOperator> top, OperatorNode<SequenceOperator> source) {
         SourceType type = program.findSource(this, source);
         return type.join(this, leftSide, joinExpression, top, source);
     }
@@ -320,10 +337,6 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
         return new LocalPlanChain(this, seq).execute(seq);
     }
 
-    private StreamValue executeLocalJoin(OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression, final OperatorNode<SequenceOperator> seq) {
-        return new LocalJoiningChain(this, seq, leftSide, joinExpression).execute(seq);
-    }
-
     private static final EnumSet<SequenceOperator> CHAINABLE = EnumSet.of(SequenceOperator.PROJECT,
             SequenceOperator.EXTRACT,
             SequenceOperator.FILTER,
@@ -378,15 +391,15 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
     }
 
     private class LocalJoiningChain extends PlanChain {
-        private final OperatorNode<SequenceOperator> seq;
-        private final OperatorNode<PhysicalExprOperator> leftSide;
-        private final OperatorNode<ExpressionOperator> joinExpression;
+        private final Location location;
+        private final StreamValue leftSide;
+        private final KeyJoinDescriptor joinDescriptor;
 
-        public LocalJoiningChain(ContextPlanner context, OperatorNode<SequenceOperator> seq, OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression) {
+        public LocalJoiningChain(ContextPlanner context, Location location, StreamValue leftSide, KeyJoinDescriptor joinDescriptor) {
             super(context);
-            this.seq = seq;
+            this.location = location;
             this.leftSide = leftSide;
-            this.joinExpression = joinExpression;
+            this.joinDescriptor = joinDescriptor;
         }
 
         @Override
@@ -397,33 +410,34 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
                     OperatorNode<SequenceOperator> leftQuery = source.getArgument(0);
                     OperatorNode<SequenceOperator> rightQuery = source.getArgument(1);
                     OperatorNode<ExpressionOperator> joinExpression = source.getArgument(2);
-                    StreamValue leftSideStream = context.executeJoinRightQuery(this.leftSide, this.joinExpression, leftQuery);
-                    OperatorNode<PhysicalExprOperator> leftSide = leftSideStream.materializeValue();
-                    return executeJoin(source, leftSide, joinExpression, rightQuery);
+                    StreamValue leftSideStream = context.executeJoinRightQuery(this.leftSide, this.joinDescriptor, leftQuery);
+                    return executeJoin(source, leftSideStream, joinExpression, rightQuery);
                 }
                 case MERGE: {
                     List<OperatorNode<SequenceOperator>> inputs = source.getArgument(0);
                     List<StreamValue> inputStreams = Lists.newArrayList();
+                    OperatorNode<PhysicalExprOperator> materializedLeftSide = leftSide.materializeValue();
                     for (OperatorNode<SequenceOperator> input : inputs) {
-                        inputStreams.add(context.executeJoinRightQuery(leftSide, joinExpression, input));
+                        inputStreams.add(context.executeJoinRightQuery(StreamValue.iterate(context, materializedLeftSide), joinDescriptor, input));
                     }
                     return StreamValue.merge(context, inputStreams);
                 }
                 case FALLBACK: {
                     OperatorNode<SequenceOperator> primary = source.getArgument(0);
                     OperatorNode<SequenceOperator> fallback = source.getArgument(1);
-                    OperatorValue primarySeq = context.executeJoinRightQuery(leftSide, joinExpression, primary).materialize();
-                    OperatorValue fallbackSeq = context.executeJoinRightQuery(leftSide, joinExpression, fallback).materialize();
+                    OperatorNode<PhysicalExprOperator> materializedLeftSide = leftSide.materializeValue();
+                    OperatorValue primarySeq = context.executeJoinRightQuery(StreamValue.iterate(context, materializedLeftSide), joinDescriptor, primary).materialize();
+                    OperatorValue fallbackSeq = context.executeJoinRightQuery(StreamValue.iterate(context, materializedLeftSide), joinDescriptor, fallback).materialize();
                     OperatorNode<PhysicalExprOperator> tryCatch = OperatorNode.create(source.getLocation(), PhysicalExprOperator.CATCH,
-                            OperatorNode.create(seq.getLocation(), PhysicalExprOperator.VALUE, primarySeq),
-                            OperatorNode.create(seq.getLocation(), PhysicalExprOperator.VALUE, fallbackSeq));
+                            OperatorNode.create(location, PhysicalExprOperator.VALUE, primarySeq),
+                            OperatorNode.create(location, PhysicalExprOperator.VALUE, fallbackSeq));
                     return StreamValue.iterate(context, tryCatch);
                 }
                 case PIPE:
                 case EVALUATE:
                 case EMPTY: {
-                    // no special processing for being the right side of a join
-                    return context.execute(source);
+                    // here's where we need to do a hash join
+                    return context.executeHashJoin(leftSide, joinDescriptor, context.execute(source).materializeValue());
                 }
 
             }
@@ -448,8 +462,7 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
                     OperatorNode<SequenceOperator> rightQuery = source.getArgument(1);
                     OperatorNode<ExpressionOperator> joinExpression = source.getArgument(2);
                     StreamValue leftSideStream = context.execute(leftQuery);
-                    OperatorNode<PhysicalExprOperator> leftSide = leftSideStream.materializeValue();
-                    return context.executeJoin(source, leftSide, joinExpression, rightQuery);
+                    return context.executeJoin(source, leftSideStream, joinExpression, rightQuery);
                 }
                 case MERGE: {
                     List<OperatorNode<SequenceOperator>> inputs = source.getArgument(0);

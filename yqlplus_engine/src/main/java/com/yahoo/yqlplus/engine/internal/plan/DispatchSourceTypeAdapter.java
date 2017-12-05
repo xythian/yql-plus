@@ -6,6 +6,7 @@
 
 package com.yahoo.yqlplus.engine.internal.plan;
 
+import com.yahoo.yqlplus.engine.internal.plan.ast.FunctionOperator;
 import com.yahoo.yqlplus.engine.internal.plan.ast.PhysicalExprOperator;
 import com.yahoo.yqlplus.engine.internal.plan.streams.StreamValue;
 import com.yahoo.yqlplus.language.logical.ExpressionOperator;
@@ -41,8 +42,8 @@ public class DispatchSourceTypeAdapter implements SourceType {
     }
 
     @Override
-    public StreamValue join(ContextPlanner planner, OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression, OperatorNode<SequenceOperator> query, OperatorNode<SequenceOperator> source) {
+    public StreamValue join(ContextPlanner planner, StreamValue inputStream, KeyJoinDescriptor join, OperatorNode<SequenceOperator> query, OperatorNode<SequenceOperator> source) {
         SourceType target = dispatch(source);
-        return target.join(planner, leftSide, joinExpression, query, source);
+        return target.join(planner, inputStream, join, query, source);
     }
 }

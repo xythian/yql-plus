@@ -374,7 +374,7 @@ source_list
     ;
 
 join_expr
-    : (join_spec source_spec ON joinExpression)
+    : (join_spec source_spec ON joinDescriptor)
     ;
 
 join_spec
@@ -458,7 +458,7 @@ argument[boolean in_select]
 
 // Limit expression syntax for joins to AND and field equality
 
-joinExpression
+joinDescriptor
     : joinClause (AND joinClause)*
 	;
 

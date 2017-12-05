@@ -40,6 +40,31 @@ public abstract class IndexedSourceType implements SourceType {
         this.indexPlanner = indexPlanner;
         this.deletePlanner = deletePlanner;
         this.updatePlanner = updatePlanner;
+        /*
+           Factor scan/delete_all operations into a scan() -> Stream<out>
+           Factor index operations into
+               Stream<outputRecord> indexQuery(Stream<queryRecord> records, Function<keyRecord, queryRecord> keyRecord, BiFunction<queryRecord, resultRecord> combiner)
+               Where queryRecord is an arbitrary type
+               keyRecord is a struct with one field per index key
+               combiner takes one queryRecord and one resultRecord (output of the indexed lookup)
+               and outputRecord is the final result stream (may be a join result)
+
+            Support the simple form
+               Stream<resultRecord> indexQuery(Stream<keyRecord> keyRecord)
+             (maybe)
+
+             Maybe also support
+               Function<keyRecord, resultRecord> lookupFunction()
+             and of course
+               lookupFunction(KeyRecord keyRecord)
+
+             Can convert the other forms into above
+                indexQuery(@Key x, @Key y)
+                indexQuery(@Key List<x>)
+
+             Optimization -- generate adapter methods when they are used rather than ahead of time.
+
+         */
     }
 
     protected StreamValue scan(Location location, final ContextPlanner planner, PlanChain.LocalChainState state, String name, final List<OperatorNode<PhysicalExprOperator>> args) {
@@ -58,16 +83,7 @@ public abstract class IndexedSourceType implements SourceType {
         throw new ProgramCompileException(location, "Source '%s' does not support INSERT", name);
     }
 
-    protected void indexQuery(List<StreamValue> out, Location location, ContextPlanner planner, List<IndexQuery> queries, List<OperatorNode<PhysicalExprOperator>> args) {
-        // base class can automatically handle scattering to individual index lookups
-        for (IndexQuery query : queries) {
-            singleIndexQuery(out, location, planner, query, args);
-        }
-    }
-
-    protected void singleIndexQuery(List<StreamValue> out, Location location, ContextPlanner planner, IndexQuery query, List<OperatorNode<PhysicalExprOperator>> args) {
-        throw new ProgramCompileException("missing IndexSourceType implementation (must implement either either single or multi index query!)");
-    }
+    protected abstract void indexQuery(List<StreamValue> out, Location location, ContextPlanner planner, List<IndexQuery> queries, List<OperatorNode<PhysicalExprOperator>> args);
 
     protected void deleteQuery(List<StreamValue> out, Location location, ContextPlanner planner, List<IndexQuery> queries, List<OperatorNode<PhysicalExprOperator>> args) {
         for (IndexQuery query : queries) {
@@ -140,13 +156,13 @@ public abstract class IndexedSourceType implements SourceType {
     }
 
     @Override
-    public StreamValue join(ContextPlanner planner, OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression, OperatorNode<SequenceOperator> query, OperatorNode<SequenceOperator> source) {
-        return new IndexPlanChain(planner, leftSide, joinExpression).execute(query);
+    public StreamValue join(ContextPlanner planner, StreamValue inputStream, KeyJoinDescriptor join, OperatorNode<SequenceOperator> query, OperatorNode<SequenceOperator> source) {
+        return new IndexPlanChain(planner, inputStream, join).execute(query);
     }
 
     private class IndexPlanChain extends PlanChain {
-        private final OperatorNode<PhysicalExprOperator> leftSide;
-        private final OperatorNode<ExpressionOperator> joinExpression;
+        private final StreamValue leftSide;
+        private final KeyJoinDescriptor joinExpression;
 
         public IndexPlanChain(ContextPlanner planner) {
             super(planner);
@@ -154,7 +170,7 @@ public abstract class IndexedSourceType implements SourceType {
             this.joinExpression = null;
         }
 
-        public IndexPlanChain(ContextPlanner planner, OperatorNode<PhysicalExprOperator> leftSide, OperatorNode<ExpressionOperator> joinExpression) {
+        public IndexPlanChain(ContextPlanner planner, StreamValue leftSide, KeyJoinDescriptor joinExpression) {
             super(planner);
             this.leftSide = leftSide;
             this.joinExpression = joinExpression;
@@ -163,6 +179,8 @@ public abstract class IndexedSourceType implements SourceType {
 
         @Override
         protected StreamValue executeSource(ContextPlanner context, LocalChainState state, OperatorNode<SequenceOperator> query) {
+            // TODO: we now must handle indexed join for INSERT, DELETE, and UPDATE query types (except _ALL)
+
             switch (query.getOperator()) {
                 case SCAN:
                     return executeSelect(context, state, query);
