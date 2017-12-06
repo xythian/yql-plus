@@ -83,9 +83,6 @@ public class IndexMatchOperatorTransform extends LogicalOperatorTransform {
     }
 
     private OperatorNode<ExpressionOperator> transformClause(OperatorNode<ExpressionOperator> clause) {
-        // transform any ANDed combinations of (EQ {READ_COLUMN} expr), (EQ expr {READ_COLUMN}) and (IN {READ_COLUMN} iterable-expr)
-        // into a ZIP_MATCH operator
-        // combine any ZIP_MATCH operators, too!
         if (clause.getOperator() != ExpressionOperator.AND) {
             return clause;
         }

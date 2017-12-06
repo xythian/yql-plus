@@ -6,11 +6,7 @@
 
 package com.yahoo.yqlplus.engine.internal.plan;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import com.yahoo.yqlplus.api.index.IndexDescriptor;
 import com.yahoo.yqlplus.api.types.YQLCoreType;
 import com.yahoo.yqlplus.engine.internal.java.backends.java.Chooser;
@@ -112,10 +108,6 @@ public class IndexedQueryPlanner {
             filter = new PushAndTransform().visitExpr(filter);
             // at this point all ORs should have been pulled to the top level, now let's build up batches of queries to indexes
             filter = new IndexMatchOperatorTransform().visitExpr(filter);
-
-            // for now we'll plan to re-evaluate the filter expression completely per row (the unmodified one); that allows this code
-            // to not worry about that and instead to focus on candidates for index query inputs
-
 
             // each OR clause will be a new stream
             //   for each stream

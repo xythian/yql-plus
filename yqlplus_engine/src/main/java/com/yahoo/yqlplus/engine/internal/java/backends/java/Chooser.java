@@ -6,7 +6,6 @@
 
 package com.yahoo.yqlplus.engine.internal.java.backends.java;
 
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -24,14 +23,10 @@ public class Chooser<T> {
             result.add(copy);
             return result;
         } else if (n == 1) {
-            return Iterables.transform(input, new Function<T, List<T>>() {
-
-                @Override
-                public List<T> apply(T input) {
-                    final List<T> res = Lists.newArrayListWithCapacity(1);
-                    res.add(input);
-                    return res;
-                }
+            return Iterables.transform(input, input1 -> {
+                final List<T> res = Lists.newArrayListWithCapacity(1);
+                res.add(input1);
+                return res;
             });
         } else if (n > input.size()) {
             return ImmutableList.of();
