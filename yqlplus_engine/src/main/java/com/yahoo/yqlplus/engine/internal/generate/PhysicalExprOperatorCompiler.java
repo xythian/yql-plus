@@ -65,6 +65,9 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Supplier;
 
 public class PhysicalExprOperatorCompiler {
     public static final MetricDimension EMPTY_DIMENSION = new MetricDimension();
@@ -205,9 +208,11 @@ public class PhysicalExprOperatorCompiler {
                     localExprs.add(arg);
                     types.add(arg.getType());
                 }
-                LambdaInvocable invocation = compileCallable(program.getType(), context.getType(), types,
+                LambdaInvocable invocation = compileSupplier(program.getType(), context.getType(), types,
                         OperatorNode.create(FunctionOperator.FUNCTION, localNames, expr.getArgument(0)));
-                final BytecodeExpression timeout = getTimeout(context, expr.getLocation());
+                BytecodeExpression supplier = invocation.invoke()
+                // public final <T> T runTimeout(Supplier<T> work) throws ExecutionException, InterruptedException {
+                scope.invoke(expr.getLocation(), invocation.invoke(expr.getLocation(), program, context), )
                 return scope.resolve(expr.getLocation(), timeout, scope.fork(expr.getLocation(), getRuntime(scope, program, context), invocation, localExprs));
             }
             case LOCAL: {
@@ -497,6 +502,20 @@ public class PhysicalExprOperatorCompiler {
         List<String> argumentNames = function.getArgument(0);
         OperatorNode<PhysicalExprOperator> functionBody = function.getArgument(1);
         LambdaFactoryBuilder builder = this.scope.createInvocableCallable();
+        builder.addArgument("$program", programType);
+        builder.addArgument("$context", contextType);
+        for (int i = 0; i < argumentNames.size(); ++i) {
+            builder.addArgument(argumentNames.get(i), argumentTypes.get(i));
+        }
+        PhysicalExprOperatorCompiler compiler = new PhysicalExprOperatorCompiler(builder);
+        BytecodeExpression result = compiler.evaluateExpression(builder.local("$program"), builder.local("$context"), functionBody);
+        return builder.complete(result);
+    }
+
+    private LambdaInvocable compileSupplier(TypeWidget programType, TypeWidget contextType, List<TypeWidget> argumentTypes, OperatorNode<FunctionOperator> function) {
+        List<String> argumentNames = function.getArgument(0);
+        OperatorNode<PhysicalExprOperator> functionBody = function.getArgument(1);
+        LambdaFactoryBuilder builder = this.scope.createLambdaBuilder(Supplier.class, "get", Object.class);
         builder.addArgument("$program", programType);
         builder.addArgument("$context", contextType);
         for (int i = 0; i < argumentNames.size(); ++i) {
