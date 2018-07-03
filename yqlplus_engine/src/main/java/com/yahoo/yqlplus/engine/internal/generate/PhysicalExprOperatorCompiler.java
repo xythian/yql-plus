@@ -13,32 +13,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.inject.Injector;
 import com.yahoo.cloud.metrics.api.MetricDimension;
-import com.yahoo.yqlplus.compiler.code.AnyTypeWidget;
-import com.yahoo.yqlplus.compiler.code.ArrayTypeWidget;
-import com.yahoo.yqlplus.compiler.code.AssignableValue;
-import com.yahoo.yqlplus.compiler.code.BaseTypeAdapter;
-import com.yahoo.yqlplus.compiler.code.BaseTypeExpression;
-import com.yahoo.yqlplus.compiler.code.BytecodeCastExpression;
-import com.yahoo.yqlplus.compiler.code.BytecodeExpression;
-import com.yahoo.yqlplus.compiler.code.CodeEmitter;
-import com.yahoo.yqlplus.compiler.code.ExactInvocation;
-import com.yahoo.yqlplus.compiler.code.GambitCreator;
-import com.yahoo.yqlplus.compiler.code.GambitRuntime;
-import com.yahoo.yqlplus.compiler.code.GambitTypes;
-import com.yahoo.yqlplus.compiler.code.InvocableBuilder;
-import com.yahoo.yqlplus.compiler.code.IterableTypeWidget;
-import com.yahoo.yqlplus.compiler.code.IterateAdapter;
-import com.yahoo.yqlplus.compiler.code.LambdaFactoryBuilder;
-import com.yahoo.yqlplus.compiler.code.LambdaInvocable;
-import com.yahoo.yqlplus.compiler.code.ListTypeWidget;
-import com.yahoo.yqlplus.compiler.code.MapTypeWidget;
-import com.yahoo.yqlplus.compiler.code.NotNullableTypeWidget;
-import com.yahoo.yqlplus.compiler.code.NullTestedExpression;
-import com.yahoo.yqlplus.compiler.code.NullableTypeWidget;
-import com.yahoo.yqlplus.compiler.code.ObjectBuilder;
-import com.yahoo.yqlplus.compiler.code.PropertyAdapter;
-import com.yahoo.yqlplus.compiler.code.ScopedBuilder;
-import com.yahoo.yqlplus.compiler.code.TypeWidget;
+import com.yahoo.yqlplus.compiler.code.*;
 import com.yahoo.yqlplus.compiler.runtime.ArithmeticOperation;
 import com.yahoo.yqlplus.compiler.runtime.BinaryComparison;
 import com.yahoo.yqlplus.compiler.runtime.KeyAccumulator;
@@ -210,10 +185,9 @@ public class PhysicalExprOperatorCompiler {
                 }
                 LambdaInvocable invocation = compileSupplier(program.getType(), context.getType(), types,
                         OperatorNode.create(FunctionOperator.FUNCTION, localNames, expr.getArgument(0)));
-                BytecodeExpression supplier = invocation.invoke()
-                // public final <T> T runTimeout(Supplier<T> work) throws ExecutionException, InterruptedException {
-                scope.invoke(expr.getLocation(), invocation.invoke(expr.getLocation(), program, context), )
-                return scope.resolve(expr.getLocation(), timeout, scope.fork(expr.getLocation(), getRuntime(scope, program, context), invocation, localExprs));
+                BytecodeExpression supplier = invocation.invoke(expr.getLocation(), program, context);
+                GambitCreator.Invocable timeoutInvocation = ExactInvocation.exactInvoke(Opcodes.INVOKEVIRTUAL, "runTimeout", scope.adapt(TaskContext.class, false), new CompletableFutureResultType(invocation.getResultType()), invocation.getReturnType());
+                return scope.cast(invocation.getResultType(), timeoutInvocation.invoke(expr.getLocation(), supplier));
             }
             case LOCAL: {
                 String localName = expr.getArgument(0);
