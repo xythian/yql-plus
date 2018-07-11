@@ -156,7 +156,7 @@ public class ExportModuleAdapter implements ModuleType {
         return StreamValue.iterate(context, adaptInvoke(location, context, name, input.materializeValue(), arguments, null));
     }
 
-    protected void reportMethodParameterException(String type, Method method, String message, Object... args) {
+    private void reportMethodParameterException(String type, Method method, String message, Object... args) {
         message = String.format(message, args);
         throw new YQLTypeException(String.format("@%s method error: %s.%s: %s", type, method.getDeclaringClass().getName(), method.getName(), message));
     }

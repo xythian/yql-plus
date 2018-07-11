@@ -119,14 +119,14 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
                 function.createFunction(rightKey.size() == 1 ? rightKey.get(0) : OperatorNode.create(PhysicalExprOperator.ARRAY, rightKey));
 
         ExprScope joinOutputScope = new ExprScope();
-        joinOutputScope.addArgument("$left");
-        joinOutputScope.addArgument("$right");
+        OperatorNode<PhysicalExprOperator> leftArgument = joinOutputScope.addArgument("$left");
+        OperatorNode<PhysicalExprOperator> rightArgument = joinOutputScope.addArgument("$right");
 
 
         List<String> fieldNames = Lists.newArrayList();
         List<OperatorNode<PhysicalExprOperator>> fieldValues = Lists.newArrayList();
-        mergeFields(leftRowType, fieldNames, fieldValues, OperatorNode.create(PhysicalExprOperator.LOCAL, "$left"));
-        mergeFields(rightRowType, fieldNames, fieldValues, OperatorNode.create(PhysicalExprOperator.LOCAL, "$right"));
+        mergeFields(leftRowType, fieldNames, fieldValues, leftArgument);
+        mergeFields(rightRowType, fieldNames, fieldValues, rightArgument);
 
         OperatorNode<FunctionOperator> outputFunction =
                 joinOutputScope.createFunction(OperatorNode.create(PhysicalExprOperator.RECORD, fieldNames, fieldValues));
