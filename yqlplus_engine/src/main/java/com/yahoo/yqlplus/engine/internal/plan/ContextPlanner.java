@@ -183,7 +183,7 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
         }
     }
 
-    StreamValue execute(OperatorNode<SequenceOperator> query) {
+    public StreamValue execute(OperatorNode<SequenceOperator> query) {
         OperatorNode<SequenceOperator> source = chainSource(query);
         switch (source.getOperator()) {
             case JOIN:
