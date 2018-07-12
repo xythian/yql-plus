@@ -7,42 +7,23 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.yahoo.cloud.metrics.api.MetricEmitter;
 import com.yahoo.cloud.metrics.api.TaskMetricEmitter;
-import com.yahoo.yqlplus.api.annotations.DefaultValue;
-import com.yahoo.yqlplus.api.annotations.Delete;
-import com.yahoo.yqlplus.api.annotations.Emitter;
-import com.yahoo.yqlplus.api.annotations.Insert;
-import com.yahoo.yqlplus.api.annotations.Key;
-import com.yahoo.yqlplus.api.annotations.Query;
-import com.yahoo.yqlplus.api.annotations.Set;
-import com.yahoo.yqlplus.api.annotations.TimeoutMilliseconds;
-import com.yahoo.yqlplus.api.annotations.Update;
+import com.yahoo.yqlplus.api.annotations.*;
 import com.yahoo.yqlplus.api.index.IndexDescriptor;
 import com.yahoo.yqlplus.api.trace.Tracer;
-import com.yahoo.yqlplus.api.types.YQLType;
 import com.yahoo.yqlplus.api.types.YQLTypeException;
 import com.yahoo.yqlplus.engine.api.PropertyNotFoundException;
 import com.yahoo.yqlplus.engine.compiler.code.AssignableValue;
-import com.yahoo.yqlplus.engine.compiler.code.BytecodeExpression;
 import com.yahoo.yqlplus.engine.compiler.code.PropertyAdapter;
-import com.yahoo.yqlplus.engine.compiler.code.ScopedBuilder;
 import com.yahoo.yqlplus.engine.compiler.code.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.ChainState;
 import com.yahoo.yqlplus.engine.internal.plan.ContextPlanner;
-import com.yahoo.yqlplus.engine.internal.plan.DynamicExpressionEnvironment;
 import com.yahoo.yqlplus.engine.internal.plan.SourceType;
 import com.yahoo.yqlplus.language.logical.ExpressionOperator;
 import com.yahoo.yqlplus.language.logical.SequenceOperator;
 import com.yahoo.yqlplus.language.operator.OperatorNode;
 import com.yahoo.yqlplus.language.parser.Location;
 import com.yahoo.yqlplus.language.parser.ProgramCompileException;
-import com.yahoo.yqlplus.operator.ExprScope;
-import com.yahoo.yqlplus.operator.FunctionOperator;
-import com.yahoo.yqlplus.operator.OperatorStep;
-import com.yahoo.yqlplus.operator.OperatorValue;
-import com.yahoo.yqlplus.operator.PhysicalExprOperator;
-import com.yahoo.yqlplus.operator.PhysicalOperator;
-import com.yahoo.yqlplus.operator.SinkOperator;
-import com.yahoo.yqlplus.operator.StreamOperator;
-import com.yahoo.yqlplus.operator.StreamValue;
+import com.yahoo.yqlplus.operator.*;
 import org.objectweb.asm.Type;
 
 import java.lang.annotation.Annotation;
@@ -72,9 +53,9 @@ public class SourceAdapter implements SourceType {
     @Override
     public StreamValue plan(ContextPlanner planner, OperatorNode<SequenceOperator> query, OperatorNode<SequenceOperator> source) {
         List<OperatorNode<ExpressionOperator>> args = source.getArgument(1);
-        int count = args.size();
-
-        return null;
+        List<OperatorNode<PhysicalExprOperator>> argsExprs = planner.evaluateList(args);
+        List<OperatorNode<PhysicalExprOperator>> argsEvaled = planner.computeExprs(argsExprs);
+        return planner.executeSource(query, (ctx, st, q) -> executeSource(argsEvaled, ctx, st, q));
     }
 
     @Override
@@ -83,6 +64,76 @@ public class SourceAdapter implements SourceType {
         int count = args.size();
         return null;
     }
+
+    private StreamValue executeSource(List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, ChainState state, OperatorNode<SequenceOperator> query) {
+        switch(query.getOperator()) {
+            case SCAN:
+                return executeSelect(args, context, state);
+            case INSERT: {
+                OperatorNode<SequenceOperator> records = query.getArgument(1);
+                List<Map<String, OperatorNode<PhysicalExprOperator>>> writeRecords = decodeInsertSequenceMaps(context, records);
+                if(writeRecords != null && writeRecords.size() == 1) {
+                    return executeInsertOne(writeRecords.get(0), args, context, state);
+                }
+                return executeInsertStream(context.execute(records), args, context, state);
+            }
+            case UPDATE: {
+                OperatorNode<ExpressionOperator> record = query.getArgument(1);
+                Map<String, OperatorNode<PhysicalExprOperator>> recordFields = decodeExpressionMap(context, record);
+                OperatorNode<ExpressionOperator> filter = query.getArgument(2);
+                return executeUpdate(args, context, recordFields, filter);
+            }
+            case UPDATE_ALL: {
+                OperatorNode<ExpressionOperator> record = query.getArgument(1);
+                Map<String, OperatorNode<PhysicalExprOperator>> recordFields = decodeExpressionMap(context, record);
+                return executeUpdateAll(args, context, recordFields);
+            }
+            case DELETE: {
+                OperatorNode<ExpressionOperator> filter = query.getArgument(1);
+                return executeDelete(args, context, filter);
+            }
+            case DELETE_ALL:
+                return executeDeleteAll(args, context);
+            default:
+                throw new UnsupportedOperationException();
+        }
+    }
+
+
+    private StreamValue executeDelete(List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, OperatorNode<ExpressionOperator> filter) {
+        return null;
+    }
+
+
+    private StreamValue executeDeleteAll(List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context) {
+        return null;
+    }
+
+    private StreamValue executeUpdateAll(List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, Map<String, OperatorNode<PhysicalExprOperator>> recordFields) {
+        return null;
+    }
+
+    private StreamValue executeUpdate(List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, Map<String, OperatorNode<PhysicalExprOperator>> recordFields, OperatorNode<ExpressionOperator> filter) {
+        return null;
+    }
+
+    private StreamValue executeInsertStream(StreamValue records, List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, ChainState state) {
+        return null;
+    }
+
+    private StreamValue executeInsertOne(Map<String, OperatorNode<PhysicalExprOperator>> record, List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, ChainState state) {
+        return null;
+    }
+
+    private StreamValue executeInsert(List<Map<String, OperatorNode<PhysicalExprOperator>>> writeRecords, StreamValue inputRecords, List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, ChainState state) {
+        return null;
+    }
+
+    private StreamValue executeSelect(List<OperatorNode<PhysicalExprOperator>> args, ContextPlanner context, ChainState state) {
+
+        return null;
+    }
+
 
     private Map<String, OperatorNode<PhysicalExprOperator>> decodeExpressionMap(ContextPlanner context, OperatorNode<ExpressionOperator> map) {
         Preconditions.checkArgument(map.getOperator() == ExpressionOperator.MAP);

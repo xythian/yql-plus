@@ -11,8 +11,8 @@ import com.google.common.collect.Lists;
 import com.yahoo.yqlplus.api.types.YQLStructType;
 import com.yahoo.yqlplus.engine.compiler.code.GambitCreator;
 import com.yahoo.yqlplus.engine.compiler.code.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.ChainState;
 import com.yahoo.yqlplus.engine.internal.plan.ContextPlanner;
-import com.yahoo.yqlplus.engine.internal.plan.PlanChain;
 import com.yahoo.yqlplus.language.operator.OperatorNode;
 import com.yahoo.yqlplus.language.parser.Location;
 import com.yahoo.yqlplus.operator.FunctionOperator;
@@ -48,7 +48,7 @@ class InsertMethod {
         this.batch = batch;
     }
 
-    public StreamValue insert(Location location, OperatorNode<PhysicalExprOperator> source, ContextPlanner planner, PlanChain.LocalChainState state, StreamValue records) {
+    public StreamValue insert(Location location, OperatorNode<PhysicalExprOperator> source, ContextPlanner planner, ChainState state, StreamValue records) {
         // TODO: should we validate that the inserted records don't contain any unknown fields?
         if(batch) {
             OperatorNode<PhysicalExprOperator> result = createInvocation(location, source, planner, records.materializeValue());

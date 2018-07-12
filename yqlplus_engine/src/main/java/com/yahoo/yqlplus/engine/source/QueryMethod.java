@@ -11,9 +11,9 @@ import com.google.common.collect.ImmutableList;
 import com.yahoo.yqlplus.api.index.IndexDescriptor;
 import com.yahoo.yqlplus.engine.compiler.code.GambitCreator;
 import com.yahoo.yqlplus.engine.compiler.code.TypeWidget;
+import com.yahoo.yqlplus.engine.internal.plan.ChainState;
 import com.yahoo.yqlplus.engine.internal.plan.ContextPlanner;
 import com.yahoo.yqlplus.engine.internal.plan.IndexedSourceType;
-import com.yahoo.yqlplus.engine.internal.plan.PlanChain;
 import com.yahoo.yqlplus.language.operator.OperatorNode;
 import com.yahoo.yqlplus.language.parser.Location;
 import com.yahoo.yqlplus.language.parser.ProgramCompileException;
@@ -80,7 +80,7 @@ class QueryMethod extends IndexedMethod {
         return super.createInvocation(location, source, planner, key, ImmutableList.of());
     }
 
-    public StreamValue scan(Location location, OperatorNode<PhysicalExprOperator> source, ContextPlanner planner, PlanChain.LocalChainState state) {
+    public StreamValue scan(Location location, OperatorNode<PhysicalExprOperator> source, ContextPlanner planner, ChainState state) {
         Preconditions.checkArgument(type == QueryType.SCAN);
         return executeCall(location, source, planner, null);
     }
