@@ -21,7 +21,6 @@ import com.yahoo.yqlplus.operator.StreamOperator;
 import com.yahoo.yqlplus.operator.StreamValue;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 class InsertMethod {
     private final String methodName;
@@ -31,11 +30,9 @@ class InsertMethod {
     private final boolean async;
     private final boolean singleton;
     private final GambitCreator.Invocable invoker;
-    private final long minimumBudget;
-    private final long maximumBudget;
     private final boolean batch;
 
-    public InsertMethod(String methodName, TypeWidget rowType, YQLStructType recordType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean batch, boolean singleton, boolean async, long minimumBudget, long maximumBudget) {
+    public InsertMethod(String methodName, TypeWidget rowType, YQLStructType recordType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean batch, boolean singleton, boolean async) {
         this.methodName = methodName;
         this.rowType = rowType;
         this.insertRecord = recordType;
@@ -43,8 +40,6 @@ class InsertMethod {
         this.invoker = invoker;
         this.singleton = singleton;
         this.async = async;
-        this.minimumBudget = minimumBudget;
-        this.maximumBudget = maximumBudget;
         this.batch = batch;
     }
 
@@ -77,11 +72,6 @@ class InsertMethod {
                 PhysicalExprOperator.INVOKE,
                 invoker,
                 callArgs);
-        if (minimumBudget > 0 || maximumBudget > 0) {
-            OperatorNode<PhysicalExprOperator> ms = planner.constant(TimeUnit.MILLISECONDS);
-            OperatorNode<PhysicalExprOperator> subContext = OperatorNode.create(PhysicalExprOperator.TIMEOUT_GUARD, planner.constant(minimumBudget), ms, planner.constant(maximumBudget), ms);
-            return OperatorNode.create(PhysicalExprOperator.WITH_CONTEXT, subContext, OperatorNode.create(PhysicalExprOperator.ENFORCE_TIMEOUT, invocation));
-        }
         return invocation;
     }
 }

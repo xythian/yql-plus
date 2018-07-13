@@ -22,12 +22,12 @@ import com.yahoo.yqlplus.operator.*;
 import java.util.List;
 
 class QueryMethod extends IndexedMethod {
-    public QueryMethod(TypeWidget rowType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async, long minimumBudget, long maximumBudget) {
-        this(null, QueryType.SCAN, rowType, adapterType, invoker, singleton, async, minimumBudget, maximumBudget);
+    public QueryMethod(TypeWidget rowType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async) {
+        this(null, QueryType.SCAN, rowType, adapterType, invoker, singleton, async);
     }
 
-    public QueryMethod(IndexDescriptor descriptor, QueryType indexType, TypeWidget rowType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async, long minimumBudget, long maximumBudget) {
-        super(minimumBudget, rowType, maximumBudget, invoker, indexType, singleton, async, descriptor);
+    public QueryMethod(IndexDescriptor descriptor, QueryType indexType, TypeWidget rowType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async) {
+        super(rowType, invoker, indexType, singleton, async, descriptor);
     }
 
     public void index(List<StreamValue> out, Location location, OperatorNode<PhysicalExprOperator> source, ContextPlanner planner, List<IndexedSourceType.IndexQuery> todo) {

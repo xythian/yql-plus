@@ -33,12 +33,12 @@ public class UpdateMethod extends IndexedMethod {
     private final YQLStructType updateRecord;
     private final TypeWidget updateType;
 
-    public UpdateMethod(String methodName, TypeWidget rowType, YQLStructType updateRecord, TypeWidget updateType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async, long minimumBudget, long maximumBudget) {
-        this(methodName, null, QueryType.SCAN, rowType, updateRecord, updateType, adapterType, invoker, singleton, async, minimumBudget, maximumBudget);
+    public UpdateMethod(String methodName, TypeWidget rowType, YQLStructType updateRecord, TypeWidget updateType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async) {
+        this(methodName, null, QueryType.SCAN, rowType, updateRecord, updateType, adapterType, invoker, singleton, async);
     }
 
-    public UpdateMethod(String methodName, IndexDescriptor descriptor, QueryType indexType, TypeWidget rowType, YQLStructType updateRecord, TypeWidget updateType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async, long minimumBudget, long maximumBudget) {
-        super(minimumBudget, rowType, maximumBudget, invoker, indexType, singleton, async, descriptor);
+    public UpdateMethod(String methodName, IndexDescriptor descriptor, QueryType indexType, TypeWidget rowType, YQLStructType updateRecord, TypeWidget updateType, TypeWidget adapterType, GambitCreator.Invocable invoker, boolean singleton, boolean async) {
+        super(rowType, invoker, indexType, singleton, async, descriptor);
         this.methodName = methodName;
         this.updateRecord = updateRecord;
         this.updateType = updateType;

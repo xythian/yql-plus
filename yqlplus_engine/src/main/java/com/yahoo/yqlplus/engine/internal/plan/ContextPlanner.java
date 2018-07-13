@@ -279,14 +279,6 @@ public class ContextPlanner implements DynamicExpressionEnvironment {
         return new ContextPlanner(program, newContext, eval);
     }
 
-    public ContextPlanner timeout(long minTimeoutMs, long maxTimeoutMs) {
-        OperatorNode<PhysicalExprOperator> ms = eval.constant(TimeUnit.MILLISECONDS);
-        OperatorValue newContext = OperatorStep.create(program.getValueTypeAdapter(), PhysicalOperator.EVALUATE,
-                contextExpr,
-                OperatorNode.create(PhysicalExprOperator.TIMEOUT_GUARD, minTimeoutMs, ms, maxTimeoutMs, ms));
-        return new ContextPlanner(program, newContext, eval);
-    }
-
     public OperatorValue end(OperatorValue value) {
         return OperatorStep.create(program.getValueTypeAdapter(), PhysicalOperator.EVALUATE, contextExpr,
                 OperatorNode.create(PhysicalExprOperator.END_CONTEXT, OperatorNode.create(PhysicalExprOperator.VALUE, value)));
